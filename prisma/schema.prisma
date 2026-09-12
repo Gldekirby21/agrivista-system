@@ -1,0 +1,619 @@
+// ==============================================================================
+// OMAG Polomolok Agricultural Resource Distribution and Production Analytics System
+// Prisma Schema (PostgreSQL) — Reclassified Phase 0 Baseline
+//
+// ARCHITECTURAL NOTICE & SCHEMA STATUS:
+// 1. These 21 models were retained from the prior prototype implementation.
+// 2. Their presence in Phase 0 represents architectural baseline scaffolding only.
+// 3. Their existence does NOT mean every field or business rule is confirmed by OMAG.
+// 4. Each model will be audited against actual requirements during its corresponding
+//    objective phase (Objectives 1–6).
+// 5. Potentially unconfirmed fields (e.g. demographic flags, assessment scoring,
+//    priority formulas, ML registry schemas, inventory units, GPS tolerances)
+//    remain subject to formal requirements verification before activation.
+// ==============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  OMAG_HEAD
+  OMAG_STAFF
+}
+
+enum VerificationStatus {
+  VERIFIED
+  PARTIALLY_VERIFIED
+  NOT_VERIFIED
+  METADATA_MISSING
+  REQUIRES_REVIEW
+}
+
+enum PriorityLevel {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum InventoryCategory {
+  SEEDS
+  FERTILIZER
+}
+
+enum ClaimStatus {
+  DRAFT
+  SUBMITTED
+  FOR_REVIEW
+  REVIEWED
+  COORDINATED_WITH_PCIC
+  REQUIRES_CORRECTION
+}
+
+// ------------------------------------------------------------------------------
+// 1. USER ACCOUNT & RBAC
+// ------------------------------------------------------------------------------
+model User {
+  id            String         @id @default(uuid())
+  username      String         @unique
+  email         String         @unique
+  passwordHash  String
+  fullName      String
+  role          Role           @default(OMAG_STAFF)
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  auditLogs     AuditLog[]
+  documents     LandDocument[]
+  reports       DamageReport[]
+  distributions DistributionRecord[]
+  photoVerifications PhotoVerification[]
+}
+
+// ------------------------------------------------------------------------------
+// 2. RSBSA FARMER
+// ------------------------------------------------------------------------------
+model Farmer {
+  id              Int            @id @default(autoincrement())
+  rsbsaNumber     String?        @unique
+  farmerCode      String?
+  firstName       String
+  middleName      String?
+  lastName        String
+  extensionName   String?
+  sex             String
+  dateOfBirth     DateTime
+  contactNumber   String?
+  email           String?
+  barangay        String
+  municipality    String         @default("Polomolok")
+  province        String         @default("South Cotabato")
+  civilStatus     String?
+  isSenior        Boolean        @default(false)
+  isPwd           Boolean        @default(false)
+  is4ps           Boolean        @default(false)
+  isIp            Boolean        @default(false)
+  status          String         @default("Active")
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  farms           Farm[]
+  documents       LandDocument[]
+  damageReports   DamageReport[]
+  distributions   DistributionRecord[]
+  photoVerifications PhotoVerification[]
+
+  @@index([barangay])
+  @@index([lastName, firstName])
+}
+
+// ------------------------------------------------------------------------------
+// 3. FARM LANDHOLDING
+// ------------------------------------------------------------------------------
+model Farm {
+  id                 Int            @id @default(autoincrement())
+  farmerId           Int
+  farmer             Farmer         @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  farmCode           String?
+  farmName           String?
+  barangay           String
+  municipality       String         @default("Polomolok")
+  province           String         @default("South Cotabato")
+  sitioPurok         String?
+  latitude           Float?
+  longitude          Float?
+  totalAreaHa        Float
+  tenureType         String         @default("Owned")
+  soilType           String?
+  waterSource        String         @default("Rainfed")
+  isCalamityAffected Boolean        @default(false)
+  status             String         @default("Active")
+  remarks            String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  parcels            FarmParcel[]
+  documents          LandDocument[]
+  photoVerifications PhotoVerification[]
+
+  @@index([farmerId])
+  @@index([barangay])
+}
+
+// ------------------------------------------------------------------------------
+// 4. FARM PARCEL (Georeferenced Plot)
+// ------------------------------------------------------------------------------
+model FarmParcel {
+  id                 Int                    @id @default(autoincrement())
+  farmId             Int
+  farm               Farm                   @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  parcelNumber       String
+  parcelCode         String?
+  latitude           Float?
+  longitude          Float?
+  areaHa             Float
+  soilType           String?
+  boundaryCoordinates Json?
+  remarks            String?
+  status             String                 @default("Active")
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  crops              Crop[]
+  damageReports      DamageReport[]
+  verifications      MetadataVerification[]
+  photoVerifications PhotoVerification[]
+
+  @@index([farmId])
+  @@index([latitude, longitude])
+}
+
+// ------------------------------------------------------------------------------
+// 5. CROP PLANTING
+// ------------------------------------------------------------------------------
+model Crop {
+  id                  Int            @id @default(autoincrement())
+  parcelId            Int
+  parcel              FarmParcel     @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+  cropType            String
+  variety             String?
+  category            String         @default("Primary")
+  plantedAreaHa       Float
+  plantingDate        DateTime
+  expectedHarvestDate DateTime?
+  actualHarvestDate   DateTime?
+  season              String
+  year                Int
+  historicalYieldTons Float?
+  harvestedAreaHa     Float?
+  productionQuantity  Float?
+  productionUnit      String?
+  recordedYieldPerHa  Float?
+  remarks             String?
+  status              String         @default("Standing")
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  damageReports       DamageReport[]
+  predictions         CropPrediction[]
+
+  @@index([parcelId])
+  @@index([cropType])
+}
+
+// ------------------------------------------------------------------------------
+// 6. LAND SUPPORTING DOCUMENT
+// ------------------------------------------------------------------------------
+model LandDocument {
+  id                 String         @id @default(uuid())
+  farmerId           Int
+  farmer             Farmer         @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  farmId             Int?
+  farm               Farm?          @relation(fields: [farmId], references: [id], onDelete: SetNull)
+  documentType       String
+  storageProvider    String         @default("LOCAL")
+  bucketName         String         @default("agrivista-documents")
+  storageKey         String
+  fileName           String
+  fileFormat         String
+  fileSizeBytes      Int
+  uploadedById       String
+  uploadedBy         User           @relation(fields: [uploadedById], references: [id])
+  verificationStatus String         @default("Pending")
+  remarks            String?
+  createdAt          DateTime       @default(now())
+
+  @@index([farmerId])
+}
+
+// ------------------------------------------------------------------------------
+// 7. DAMAGE INCIDENT REPORT
+// ------------------------------------------------------------------------------
+model DamageReport {
+  id                 Int                    @id @default(autoincrement())
+  reportNumber       String                 @unique
+  farmerId           Int
+  farmer             Farmer                 @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  parcelId           Int
+  parcel             FarmParcel             @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+  cropId             Int
+  crop               Crop                   @relation(fields: [cropId], references: [id], onDelete: Cascade)
+  incidentDate       DateTime
+  calamityType       String
+  reportedDamagePercent Float
+  reportedAffectedAreaHa Float
+  narrativeDescription String?
+  status             ClaimStatus            @default(SUBMITTED)
+  createdById        String
+  createdBy          User                   @relation(fields: [createdById], references: [id])
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  photos             DamagePhoto[]
+  assessment         DamageAssessment?
+  prediction         CropPrediction?
+  pcicClaim          PcicClaim?
+
+  @@index([farmerId])
+  @@index([parcelId])
+  @@index([incidentDate])
+}
+
+// ------------------------------------------------------------------------------
+// 8. DAMAGE EVIDENCE PHOTO
+// ------------------------------------------------------------------------------
+model DamagePhoto {
+  id                 String                 @id @default(uuid())
+  reportId           Int
+  report             DamageReport           @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  storageProvider    String                 @default("LOCAL")
+  bucketName         String                 @default("agrivista-damage-photos")
+  storageKey         String
+  originalFileName   String
+  fileSizeBytes      Int
+  mimeType           String
+  uploadedAt         DateTime               @default(now())
+
+  metadata           PhotoMetadata?
+
+  @@index([reportId])
+}
+
+// ------------------------------------------------------------------------------
+// 9. EXTRACTED EXIF METADATA
+// ------------------------------------------------------------------------------
+model PhotoMetadata {
+  id                 String                 @id @default(uuid())
+  photoId            String                 @unique
+  photo              DamagePhoto            @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  hasExif            Boolean                @default(false)
+  latitude           Float?
+  longitude          Float?
+  altitude           Float?
+  capturedDate       DateTime?
+  deviceMake         String?
+  deviceModel        String?
+  rawExifData        Json?
+
+  verification       MetadataVerification?
+}
+
+// ------------------------------------------------------------------------------
+// 10. DETERMINISTIC METADATA VERIFICATION
+// ------------------------------------------------------------------------------
+model MetadataVerification {
+  id                 String                 @id @default(uuid())
+  metadataId         String                 @unique
+  metadata           PhotoMetadata          @relation(fields: [metadataId], references: [id], onDelete: Cascade)
+  parcelId           Int
+  parcel             FarmParcel             @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+  calculatedDistanceMeters Float?
+  acceptableThresholdMeters Float           @default(500.0)
+  timestampDifferenceHours Float?
+  status             VerificationStatus     @default(REQUIRES_REVIEW)
+  verificationNotes  String?
+  verifiedAt         DateTime               @default(now())
+
+  @@index([status])
+}
+
+// ------------------------------------------------------------------------------
+// 10b. DETERMINISTIC FARM PHOTO & PARCEL GPS AUDIT VERIFICATION (OBJECTIVE #2)
+// ------------------------------------------------------------------------------
+model PhotoVerification {
+  id                        String       @id @default(uuid())
+  farmerId                  Int
+  farmer                    Farmer       @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  farmId                    Int
+  farm                      Farm         @relation(fields: [farmId], references: [id], onDelete: Cascade)
+  parcelId                  Int
+  parcel                    FarmParcel   @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+  
+  // Storage references (uses abstract StorageProvider, local or Supabase)
+  storageProvider           String       @default("LOCAL")
+  bucketName                String       @default("agrivista-verifications")
+  storageKey                String
+  originalFileName          String
+  fileSizeBytes             Int
+  mimeType                  String
+  
+  // Extracted photo EXIF metadata (strictly authentic, zero AI)
+  photoTimestamp            DateTime?
+  photoLatitude             Float?
+  photoLongitude            Float?
+  photoAltitude             Float?
+  deviceMake                String?
+  deviceModel               String?
+  
+  // Registered parcel centroid coordinates at time of verification (no fake fallbacks)
+  registeredLatitude        Float?
+  registeredLongitude       Float?
+  
+  // Deterministic Geospatial & Temporal Verification outputs
+  calculatedDistanceMeters  Float?
+  thresholdMeters           Float        @default(500.0) // DEVELOPMENT DEFAULT — PENDING OMAG CONFIRMATION
+  verificationStatus        String       // ACCEPTED, REVIEW, REJECTED, NOT_ACCEPTED, PENDING
+  gpsStatus                 String       // MATCH, OUTSIDE_THRESHOLD, GPS_MISSING, PARCEL_GPS_MISSING, INVALID_COORDINATES
+  timestampStatus           String       // VALID, TIMESTAMP_MISSING, OUT_OF_RANGE
+  failureReasonCode         String?      // Machine-readable code if not verified
+  verificationNotes         String?      // Human-readable audit explanation
+  metadataJson              Json?        // Safe subset of extracted EXIF tags
+  
+  // AI-Assisted Interpretation Layer (Gemini 2.5 Flash Advisory - strictly non-authoritative)
+  aiAssessment              String?      // CONSISTENT, INCONSISTENT, INSUFFICIENT_EVIDENCE
+  aiRecommendation          String?      // ACCEPT, REVIEW, REJECT
+  aiReviewRequired          Boolean      @default(false)
+  aiExplanation             String?
+  aiAuditNote               String?
+  aiConfidence              String?
+  aiConflict                Boolean      @default(false)
+  aiModelUsed               String?      // e.g. "gemini-2.5-flash"
+  aiAssessedAt              DateTime?
+  aiRawResponse             Json?
+  
+  // System Review & Oversight (System action, not official PCIC approval)
+  systemReviewStatus        String?      @default("PENDING") // PENDING, REVIEWED, CONFIRMED
+  systemReviewNotes         String?
+  systemReviewedById        String?
+  systemReviewedAt          DateTime?
+
+  // Audit and actor tracking
+  verifiedById              String?
+  verifiedBy                User?        @relation(fields: [verifiedById], references: [id], onDelete: SetNull)
+  
+  createdAt                 DateTime     @default(now())
+  updatedAt                 DateTime     @updatedAt
+
+  @@index([farmerId])
+  @@index([farmId])
+  @@index([parcelId])
+  @@index([verificationStatus])
+  @@index([createdAt(sort: Desc)])
+}
+
+// ------------------------------------------------------------------------------
+// 11. FIELD DAMAGE ASSESSMENT
+// ------------------------------------------------------------------------------
+model DamageAssessment {
+  id                 String                 @id @default(uuid())
+  reportId           Int                    @unique
+  report             DamageReport           @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  assessedDamagePercent Float
+  assessedAreaHa     Float
+  cropStage          String
+  assessorNotes      String?
+  assessedAt         DateTime               @default(now())
+}
+
+// ------------------------------------------------------------------------------
+// 12. ML MODEL REGISTRY & METRICS
+// ------------------------------------------------------------------------------
+model MlModelRegistry {
+  id                 String                 @id @default(uuid())
+  modelName          String                 @unique
+  modelVersion       String
+  targetVariable     String
+  algorithm          String
+  trainingPeriod     String
+  mae                Float
+  rmse               Float
+  r2Score            Float
+  featuresUsed       String[]
+  isActive           Boolean                @default(true)
+  createdAt          DateTime               @default(now())
+
+  predictions        CropPrediction[]
+}
+
+// ------------------------------------------------------------------------------
+// 13. CROP PREDICTION (DECISION SUPPORT ONLY)
+// ------------------------------------------------------------------------------
+model CropPrediction {
+  id                             String                 @id @default(uuid())
+  reportId                       Int?                   @unique
+  report                         DamageReport?          @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  cropId                         Int
+  crop                           Crop                   @relation(fields: [cropId], references: [id], onDelete: Cascade)
+  modelId                        String?
+  model                          MlModelRegistry?       @relation(fields: [modelId], references: [id], onDelete: SetNull)
+  projectedNormalYieldTons       Float
+  predictedRemainingYieldTons    Float
+  predictedYieldReductionPercent Float                  @default(0.0)
+  estimatedEconomicLossPhp       Float?
+  inputFeaturesSnapshot          Json
+  predictionTimestamp            DateTime               @default(now())
+
+  @@index([cropId])
+  @@index([predictionTimestamp(sort: Desc)])
+}
+
+// ------------------------------------------------------------------------------
+// 14. PCIC-RELATED CLAIM MONITORING DOCKET
+// ------------------------------------------------------------------------------
+model PcicClaim {
+  id                 String                 @id @default(uuid())
+  claimNumber        String                 @unique
+  reportId           Int                    @unique
+  report             DamageReport           @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  claimStatus        ClaimStatus            @default(SUBMITTED)
+  insurancePolicyNo  String?
+  filingDate         DateTime               @default(now())
+  remarks            String?
+  reviewedAt         DateTime?
+  reviewedBy         String?
+
+  priorityScore      ClaimPriorityScore?
+
+  @@index([claimStatus])
+}
+
+// ------------------------------------------------------------------------------
+// 15. CLAIM PRIORITY SCORE & RANKING
+// ------------------------------------------------------------------------------
+model ClaimPriorityScore {
+  id                 String                 @id @default(uuid())
+  claimId            String                 @unique
+  claim              PcicClaim              @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  score              Float
+  priorityLevel      PriorityLevel
+  rankPosition       Int?
+  formulaBreakdown   Json
+  calculatedAt       DateTime               @default(now())
+
+  @@index([priorityLevel])
+  @@index([score(sort: Desc)])
+}
+
+// ------------------------------------------------------------------------------
+// 16. INVENTORY CATALOG ITEM
+// ------------------------------------------------------------------------------
+model InventoryItem {
+  id                 Int                    @id @default(autoincrement())
+  itemCode           String                 @unique
+  name               String
+  category           InventoryCategory
+  unit               String
+  reorderLevel       Float                  @default(10.0)
+  description        String?
+  isActive           Boolean                @default(true)
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  batches            InventoryBatch[]
+}
+
+// ------------------------------------------------------------------------------
+// 17. INVENTORY BATCH (FIFO MONITORED)
+// ------------------------------------------------------------------------------
+model InventoryBatch {
+  id                 String                 @id @default(uuid())
+  itemId             Int
+  item               InventoryItem          @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  batchNumber        String
+  receivedQuantity   Float
+  remainingQuantity  Float
+  dateReceived       DateTime
+  expiryDate         DateTime?
+  viabilityDate      DateTime?
+  supplierSource     String?
+  storageLocation    String?
+  status             String                 @default("Available")
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  distributions      DistributionRecord[]
+
+  @@index([itemId, remainingQuantity])
+  @@index([dateReceived])
+}
+
+// ------------------------------------------------------------------------------
+// 18. FIFO DISTRIBUTION TRANSACTION RECORD
+// ------------------------------------------------------------------------------
+model DistributionRecord {
+  id                 String                 @id @default(uuid())
+  batchId            String
+  batch              InventoryBatch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  farmerId           Int
+  farmer             Farmer                 @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  quantityDistributed Float
+  unit               String
+  distributionDate   DateTime               @default(now())
+  releasedById       String
+  releasedBy         User                   @relation(fields: [releasedById], references: [id])
+  purpose            String?
+  remarks            String?
+
+  @@index([batchId])
+  @@index([farmerId])
+  @@index([distributionDate])
+}
+
+// ------------------------------------------------------------------------------
+// 19. HISTORICAL AGRICULTURAL DATA
+// ------------------------------------------------------------------------------
+model HistoricalAgriculturalData {
+  id                 Int                    @id @default(autoincrement())
+  barangay           String
+  year               Int
+  season             String
+  cropType           String
+  plantedAreaHa      Float
+  harvestedAreaHa    Float
+  productionTons     Float
+  averageYieldTonsHa Float
+  seedUsageKg        Float?
+  fertilizerUsageBags Float?
+  soilType           String?
+  calamityOccurrences Int                   @default(0)
+  createdAt          DateTime               @default(now())
+
+  @@index([barangay, cropType, year])
+}
+
+// ------------------------------------------------------------------------------
+// 20. RESOURCE DEMAND FORECAST
+// ------------------------------------------------------------------------------
+model ResourceDemandForecast {
+  id                 String                 @id @default(uuid())
+  barangay           String
+  cropType           String
+  forecastYear       Int
+  forecastSeason     String
+  projectedAreaHa    Float
+  forecastSeedKg     Float
+  forecastFertilizerBags Float
+  methodUsed         String
+  confidenceMetric   Float?
+  limitationsNotice  String
+  generatedAt        DateTime               @default(now())
+
+  @@index([barangay, forecastYear])
+}
+
+// ------------------------------------------------------------------------------
+// 21. IMMUTABLE SYSTEM AUDIT TRAIL
+// ------------------------------------------------------------------------------
+model AuditLog {
+  id                 String                 @id @default(uuid())
+  userId             String?
+  user               User?                  @relation(fields: [userId], references: [id], onDelete: SetNull)
+  roleSnapshot       String?
+  action             String
+  module             String
+  recordId           String?
+  previousValues     Json?
+  newValues          Json?
+  ipAddress          String?
+  timestamp          DateTime               @default(now())
+
+  @@index([module, action])
+  @@index([timestamp(sort: Desc)])
+}
