@@ -46,3 +46,15 @@ venv/
 
 # uploads
 /uploads/
+
+# database backups
+*.sql
+
+# documentation reports (keep README.md only)
+*.md
+!README.md
+
+# tests and test scripts
+/tests/
+/python/tests/
+/scripts/test_*
