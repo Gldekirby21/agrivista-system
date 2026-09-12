@@ -4,6 +4,8 @@ import { BeneficiaryList } from "@/features/rsbsa/components/BeneficiaryList";
 import { getBeneficiaries } from "@/features/rsbsa/lib/beneficiaryQueries";
 import { requireRole } from "@/lib/auth/session";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "RSBSA Beneficiaries Review | OMAG Polomolok",
   description: "Administrative oversight of RSBSA beneficiaries, farm landholdings, and crop cycles.",

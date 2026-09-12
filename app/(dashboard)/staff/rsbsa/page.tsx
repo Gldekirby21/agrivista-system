@@ -3,6 +3,8 @@ import { Header } from "@/components/layout/header/Header";
 import { StaffRSBSAView } from "@/features/rsbsa/components/StaffRSBSAView";
 import { getFarmers } from "@/features/rsbsa/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "RSBSA Intake & Records | OMAG Polomolok",
   description: "Field operational intake for farmer records, parcels, and crop cycles.",

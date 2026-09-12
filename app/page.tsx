@@ -6,6 +6,8 @@ import { getCurrentSession } from "@/lib/auth/session";
  * Redirects authenticated users to their respective role dashboard,
  * or unauthenticated users to the login portal.
  */
+export const dynamic = "force-dynamic";
+
 export default async function RootPage() {
   const session = await getCurrentSession();
 

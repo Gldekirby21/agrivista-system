@@ -4,6 +4,8 @@ import { HeadPhotoVerificationView } from "@/features/photo-verification/compone
 import { getPhotoVerifications } from "@/features/photo-verification";
 import { requireRole } from "@/lib/auth/session";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Photo Verification Oversight | OMAG Polomolok",
   description: "Executive oversight of farm photograph metadata, deterministic distance validation, and AI advisory assessments.",

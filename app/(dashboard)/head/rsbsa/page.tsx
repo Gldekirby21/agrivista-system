@@ -3,6 +3,8 @@ import { Header } from "@/components/layout/header/Header";
 import { HeadRSBSAView } from "@/features/rsbsa/components/HeadRSBSAView";
 import { getFarmers, getRSBSASummaryStats } from "@/features/rsbsa/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "RSBSA Oversight | OMAG Polomolok",
   description: "Executive census oversight and parcel landholdings review.",

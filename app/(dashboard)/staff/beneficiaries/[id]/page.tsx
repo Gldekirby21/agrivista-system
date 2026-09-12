@@ -9,6 +9,8 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Beneficiary Record & Dossier | OMAG Polomolok",
   description: "Detailed beneficiary agricultural profile, farms, parcels, crops, and land documents.",

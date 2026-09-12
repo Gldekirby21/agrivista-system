@@ -9,6 +9,8 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Photo Verification Dossier | OMAG Polomolok",
   description: "Detailed photo metadata, deterministic evidence, and AI advisory interpretation.",

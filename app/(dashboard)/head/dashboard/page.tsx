@@ -2,6 +2,8 @@ import React from "react";
 import { Header } from "@/components/layout/header/Header";
 import { HeadDashboardView } from "@/components/dashboard/head/HeadDashboardView";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Head Dashboard | OMAG Polomolok",
   description: "Executive agricultural administration and analytics dashboard for OMAG Head.",

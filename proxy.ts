@@ -6,7 +6,7 @@ const JWT_SECRET = new TextEncoder().encode(
   process.env.AUTH_SECRET || "omag-polomolok-dev-secret-key-2026-super-secure-token"
 );
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
@@ -59,3 +59,6 @@ export const config = {
     "/login",
   ],
 };
+
+export const middleware = proxy;
+

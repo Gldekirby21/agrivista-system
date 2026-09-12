@@ -9,6 +9,8 @@ interface PageProps {
   params: Promise<{ id: string }>;
 }
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Prediction Dossier | OMAG Polomolok",
   description: "Detailed crop yield reduction and economic loss analytical report.",

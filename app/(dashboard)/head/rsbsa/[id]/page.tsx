@@ -4,6 +4,8 @@ import { Header } from "@/components/layout/header/Header";
 import { FarmerDetails } from "@/features/rsbsa/components/FarmerDetails";
 import { getFarmerById } from "@/features/rsbsa/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Review Farmer Profile | OMAG Polomolok",
   description: "Executive review of farmer profile, landholdings, crops, and documents.",

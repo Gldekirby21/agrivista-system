@@ -4,6 +4,8 @@ import { Header } from "@/components/layout/header/Header";
 import { FarmerDetails } from "@/features/rsbsa/components/FarmerDetails";
 import { getFarmerById } from "@/features/rsbsa/lib/queries";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Farmer Workspace | OMAG Polomolok",
   description: "Operational management of farmer profile, landholdings, parcels, crops, and documents.",

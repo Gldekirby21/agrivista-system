@@ -3,6 +3,8 @@ import { Header } from "@/components/layout/header/Header";
 import { StaffYieldLossView } from "@/features/yield-loss/components/StaffYieldLossView";
 import { requireRole } from "@/lib/auth/session";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Yield & Loss Prediction | OMAG Polomolok",
   description: "Machine-learning-based crop yield and economic loss estimation for agricultural planning.",

@@ -3,6 +3,8 @@ import { Header } from "@/components/layout/header/Header";
 import { BeneficiaryForm } from "@/features/rsbsa/components/BeneficiaryForm";
 import { requireRole } from "@/lib/auth/session";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Register Beneficiary | OMAG Polomolok",
   description: "Intake form for enrolling a new agricultural beneficiary in the RSBSA system.",

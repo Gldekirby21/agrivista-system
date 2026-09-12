@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 import { getCurrentSession } from "@/lib/auth/session";
 import { LoginForm } from "@/features/auth/components/LoginForm";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Login | OMAG Polomolok Agricultural System",
   description: "Sign in to the OMAG Polomolok Agricultural Resource Distribution & Production Analytics System.",
