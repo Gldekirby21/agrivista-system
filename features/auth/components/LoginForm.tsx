@@ -82,6 +82,7 @@ export const LoginForm: React.FC = () => {
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               placeholder="e.g. staff.polomolok or staff@polomolok.gov.ph"
+              autoComplete="username"
               required
               disabled={isLoading}
             />
@@ -95,6 +96,7 @@ export const LoginForm: React.FC = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••••••"
+              autoComplete="current-password"
               required
               disabled={isLoading}
             />

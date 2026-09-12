@@ -94,10 +94,12 @@ export async function POST(request: Request) {
     });
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Authentication Error:", error);
     return NextResponse.json(
-      { error: "An unexpected internal error occurred during authentication." },
+      {
+        error: error?.message || "An unexpected internal error occurred during authentication.",
+      },
       { status: 500 }
     );
   }
