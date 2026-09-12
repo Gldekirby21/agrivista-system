@@ -5,6 +5,7 @@ Objective 3: Machine-Learning-Based Crop Yield & Loss Prediction
 
 import sys
 import os
+import warnings
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException, status
@@ -64,6 +65,16 @@ class TrainModelRequest(BaseModel):
 # ------------------------------------------------------------------------------
 # API Endpoints
 # ------------------------------------------------------------------------------
+
+@app.get("/")
+def root():
+    """Root endpoint for Render health and service status."""
+    return {
+        "status": "online",
+        "service": "OMAG Polomolok ML Prediction Service",
+        "version": "1.0.0",
+        "docs": "/docs"
+    }
 
 @app.get("/health")
 def health_check():
