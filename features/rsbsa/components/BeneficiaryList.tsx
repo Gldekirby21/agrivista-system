@@ -77,11 +77,15 @@ export const BeneficiaryList: React.FC<BeneficiaryListProps> = ({
   });
 
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  const [archiveModalTarget, setArchiveModalTarget] = useState<{ id: number; name: string } | null>(null);
 
-  const handleArchive = async (id: number, name: string) => {
-    if (!confirm(`Are you sure you want to archive beneficiary "${name}"? This record can be restored later.`)) {
-      return;
-    }
+  const handleArchive = (id: number, name: string) => {
+    setArchiveModalTarget({ id, name });
+  };
+
+  const handleConfirmArchive = async () => {
+    if (!archiveModalTarget) return;
+    const { id, name } = archiveModalTarget;
 
     setArchivingId(id);
     setArchiveError(null);
@@ -98,6 +102,7 @@ export const BeneficiaryList: React.FC<BeneficiaryListProps> = ({
       }
 
       setArchiveSuccess(`Beneficiary "${name}" has been archived successfully.`);
+      setArchiveModalTarget(null);
       router.refresh();
     } catch (err: any) {
       setArchiveError(err?.message || "An error occurred while archiving.");
@@ -336,6 +341,43 @@ export const BeneficiaryList: React.FC<BeneficiaryListProps> = ({
           }}
           onCancel={() => setIsRegisterModalOpen(false)}
         />
+      </Modal>
+
+      {/* Archive Confirmation Modal (Non-blocking) */}
+      <Modal
+        isOpen={!!archiveModalTarget}
+        onClose={() => setArchiveModalTarget(null)}
+        title="Confirm Archival"
+        subtitle="Deactivate agricultural beneficiary record"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            Are you sure you want to archive beneficiary{" "}
+            <strong className="text-slate-800 font-semibold">
+              &quot;{archiveModalTarget?.name}&quot;
+            </strong>
+            ? This record will be hidden from the active roster but can be restored later.
+          </p>
+          <div className="flex items-center justify-end gap-2.5 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setArchiveModalTarget(null)}
+              disabled={!!archivingId}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={handleConfirmArchive}
+              isLoading={!!archivingId}
+            >
+              Archive Beneficiary
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

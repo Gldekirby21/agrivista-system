@@ -76,6 +76,11 @@ export const BeneficiaryDetails: React.FC<BeneficiaryDetailsProps> = ({
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [archiveItemTarget, setArchiveItemTarget] = useState<{
+    type: "farm" | "parcel" | "crop" | "document";
+    id: number;
+    label: string;
+  } | null>(null);
 
   // Form inputs
   const [farmForm, setFarmForm] = useState({
@@ -292,47 +297,51 @@ export const BeneficiaryDetails: React.FC<BeneficiaryDetailsProps> = ({
     }
   };
 
-  const handleArchiveFarm = async (farmId: number) => {
-    if (!confirm("Are you sure you want to archive this farm landholding?")) return;
-    try {
-      const res = await fetch(`/api/farms/${farmId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to archive farm");
-      await refreshData();
-    } catch (err: any) {
-      setActionError(err.message);
-    }
+  const handleArchiveFarm = (farmId: number) => {
+    setArchiveItemTarget({ type: "farm", id: farmId, label: "Farm Landholding" });
   };
 
-  const handleArchiveParcel = async (parcelId: number) => {
-    if (!confirm("Are you sure you want to archive this farm parcel?")) return;
-    try {
-      const res = await fetch(`/api/farm-parcels/${parcelId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to archive parcel");
-      await refreshData();
-    } catch (err: any) {
-      setActionError(err.message);
-    }
+  const handleArchiveParcel = (parcelId: number) => {
+    setArchiveItemTarget({ type: "parcel", id: parcelId, label: "Farm Parcel" });
   };
 
-  const handleArchiveCrop = async (cropId: number) => {
-    if (!confirm("Are you sure you want to archive this crop record?")) return;
-    try {
-      const res = await fetch(`/api/crops/${cropId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to archive crop");
-      await refreshData();
-    } catch (err: any) {
-      setActionError(err.message);
-    }
+  const handleArchiveCrop = (cropId: number) => {
+    setArchiveItemTarget({ type: "crop", id: cropId, label: "Crop Record" });
   };
 
-  const handleArchiveDocument = async (docId: number) => {
-    if (!confirm("Are you sure you want to archive this supporting document?")) return;
+  const handleArchiveDocument = (docId: number) => {
+    setArchiveItemTarget({ type: "document", id: docId, label: "Supporting Document" });
+  };
+
+  const handleConfirmArchiveItem = async () => {
+    if (!archiveItemTarget) return;
+    setIsSubmitting(true);
+    setActionError(null);
+    setActionSuccess(null);
+
     try {
-      const res = await fetch(`/api/land-documents/${docId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to archive document");
+      const endpoint =
+        archiveItemTarget.type === "farm"
+          ? `/api/farms/${archiveItemTarget.id}`
+          : archiveItemTarget.type === "parcel"
+          ? `/api/farm-parcels/${archiveItemTarget.id}`
+          : archiveItemTarget.type === "crop"
+          ? `/api/crops/${archiveItemTarget.id}`
+          : `/api/land-documents/${archiveItemTarget.id}`;
+
+      const res = await fetch(endpoint, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || `Failed to archive ${archiveItemTarget.label}`);
+      }
+
+      setActionSuccess(`${archiveItemTarget.label} archived successfully.`);
+      setArchiveItemTarget(null);
       await refreshData();
     } catch (err: any) {
-      setActionError(err.message);
+      setActionError(err.message || "An error occurred while archiving.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1815,6 +1824,50 @@ export const BeneficiaryDetails: React.FC<BeneficiaryDetailsProps> = ({
               onClick={handleArchiveBeneficiary}
             >
               {isSubmitting ? "Archiving..." : "Confirm Archive"}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* 7. ARCHIVE ITEM CONFIRMATION MODAL (Non-blocking) */}
+      <Modal
+        isOpen={!!archiveItemTarget}
+        onClose={() => setArchiveItemTarget(null)}
+        title={`Archive ${archiveItemTarget?.label || "Record"}`}
+        subtitle="Confirm deactivation of agricultural component"
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900">
+            <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+            <p>
+              Are you sure you want to archive this <strong>{archiveItemTarget?.label.toLowerCase()}</strong>? It will be marked as inactive in this dossier.
+            </p>
+          </div>
+          {actionError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+              {actionError}
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setArchiveItemTarget(null)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              disabled={isSubmitting}
+              isLoading={isSubmitting}
+              onClick={handleConfirmArchiveItem}
+            >
+              Confirm Archive
             </Button>
           </div>
         </div>
