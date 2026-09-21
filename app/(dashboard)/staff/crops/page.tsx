@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function StaffCropsRedirect() {
-  redirect("/staff/predictions");
+  redirect("/staff/beneficiaries?view=crops");
 }

@@ -239,3 +239,205 @@ export async function getBeneficiarySummaryStats() {
     barangayCounts,
   };
 }
+
+/**
+ * Queries all farm landholdings with owner farmer and parcel summary
+ */
+export async function getAllFarms(params: { search?: string; barangay?: string; status?: string } = {}) {
+  const where: Prisma.FarmWhereInput = {};
+  if (params.status && params.status !== "ALL") {
+    where.status = { equals: params.status, mode: "insensitive" };
+  } else if (!params.status) {
+    where.status = { not: "Archived" };
+  }
+
+  if (params.barangay && params.barangay !== "ALL") {
+    where.barangay = { equals: params.barangay, mode: "insensitive" };
+  }
+
+  if (params.search && params.search.trim()) {
+    const q = params.search.trim();
+    where.OR = [
+      { farmName: { contains: q, mode: "insensitive" } },
+      { barangay: { contains: q, mode: "insensitive" } },
+      { tenureType: { contains: q, mode: "insensitive" } },
+      { farmer: { firstName: { contains: q, mode: "insensitive" } } },
+      { farmer: { lastName: { contains: q, mode: "insensitive" } } },
+      { farmer: { rsbsaNumber: { contains: q, mode: "insensitive" } } },
+    ];
+  }
+
+  return prisma.farm.findMany({
+    where,
+    include: {
+      farmer: {
+        select: {
+          id: true,
+          firstName: true,
+          middleName: true,
+          lastName: true,
+          extensionName: true,
+          rsbsaNumber: true,
+          barangay: true,
+          contactNumber: true,
+        },
+      },
+      parcels: {
+        where: { status: { not: "Archived" } },
+        include: { crops: { where: { status: { not: "Archived" } } } },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/**
+ * Queries all farm parcels with farm and farmer context
+ */
+export async function getAllFarmParcels(params: { search?: string; status?: string } = {}) {
+  const where: Prisma.FarmParcelWhereInput = {};
+  if (params.status && params.status !== "ALL") {
+    where.status = { equals: params.status, mode: "insensitive" };
+  } else if (!params.status) {
+    where.status = { not: "Archived" };
+  }
+
+  if (params.search && params.search.trim()) {
+    const q = params.search.trim();
+    where.OR = [
+      { parcelNumber: { contains: q, mode: "insensitive" } },
+      { farm: { farmName: { contains: q, mode: "insensitive" } } },
+      { farm: { barangay: { contains: q, mode: "insensitive" } } },
+      { farm: { farmer: { firstName: { contains: q, mode: "insensitive" } } } },
+      { farm: { farmer: { lastName: { contains: q, mode: "insensitive" } } } },
+    ];
+  }
+
+  return prisma.farmParcel.findMany({
+    where,
+    include: {
+      farm: {
+        include: {
+          farmer: {
+            select: {
+              id: true,
+              firstName: true,
+              middleName: true,
+              lastName: true,
+              extensionName: true,
+              rsbsaNumber: true,
+              barangay: true,
+            },
+          },
+        },
+      },
+      crops: {
+        where: { status: { not: "Archived" } },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+/**
+ * Queries all crop cycles with parent parcel, farm, and farmer
+ */
+export async function getAllCrops(params: { search?: string; status?: string } = {}) {
+  const where: Prisma.CropWhereInput = {};
+  if (params.status && params.status !== "ALL") {
+    where.status = { equals: params.status, mode: "insensitive" };
+  } else if (!params.status) {
+    where.status = { not: "Archived" };
+  }
+
+  if (params.search && params.search.trim()) {
+    const q = params.search.trim();
+    where.OR = [
+      { cropType: { contains: q, mode: "insensitive" } },
+      { variety: { contains: q, mode: "insensitive" } },
+      { parcel: { parcelNumber: { contains: q, mode: "insensitive" } } },
+      { parcel: { farm: { farmName: { contains: q, mode: "insensitive" } } } },
+      { parcel: { farm: { barangay: { contains: q, mode: "insensitive" } } } },
+      { parcel: { farm: { farmer: { firstName: { contains: q, mode: "insensitive" } } } } },
+      { parcel: { farm: { farmer: { lastName: { contains: q, mode: "insensitive" } } } } },
+    ];
+  }
+
+  return prisma.crop.findMany({
+    where,
+    include: {
+      parcel: {
+        include: {
+          farm: {
+            include: {
+              farmer: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  middleName: true,
+                  lastName: true,
+                  extensionName: true,
+                  rsbsaNumber: true,
+                  barangay: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { plantingDate: "desc" },
+  });
+}
+
+/**
+ * Queries all supporting land documents with associated farmer and farm
+ */
+export async function getAllLandDocuments(params: { search?: string; status?: string } = {}) {
+  const where: Prisma.LandDocumentWhereInput = {};
+  if (params.status && params.status !== "ALL") {
+    where.verificationStatus = { equals: params.status, mode: "insensitive" };
+  } else if (!params.status) {
+    where.verificationStatus = { not: "Archived" };
+  }
+
+  if (params.search && params.search.trim()) {
+    const q = params.search.trim();
+    where.OR = [
+      { documentType: { contains: q, mode: "insensitive" } },
+      { fileName: { contains: q, mode: "insensitive" } },
+      { remarks: { contains: q, mode: "insensitive" } },
+      { farmer: { firstName: { contains: q, mode: "insensitive" } } },
+      { farmer: { lastName: { contains: q, mode: "insensitive" } } },
+      { farmer: { rsbsaNumber: { contains: q, mode: "insensitive" } } },
+    ];
+  }
+
+  return prisma.landDocument.findMany({
+    where,
+    include: {
+      uploadedBy: {
+        select: { id: true, fullName: true, role: true },
+      },
+      farmer: {
+        select: {
+          id: true,
+          firstName: true,
+          middleName: true,
+          lastName: true,
+          extensionName: true,
+          rsbsaNumber: true,
+          barangay: true,
+        },
+      },
+      farm: {
+        select: {
+          id: true,
+          farmName: true,
+          barangay: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}

@@ -1,37 +1,41 @@
 import React from "react";
-import { UserPlus, Camera, PackagePlus, FilePlus2, SlidersHorizontal } from "lucide-react";
+import Link from "next/link";
+import { UserPlus, Camera, PackagePlus, FilePlus2, SlidersHorizontal, ArrowRight } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/common/Card";
-import { Button } from "@/components/ui/Button";
 
 export const StaffQuickActions: React.FC = () => {
   const actions = [
     {
       id: "action-enroll-farmer",
       title: "Enroll Beneficiary (RSBSA)",
-      description: "Initiate new beneficiary registration and profile intake.",
+      description: "Open beneficiary roster & register verified farmer profiles.",
       icon: UserPlus,
-      phase: "Objective 1",
+      href: "/staff/beneficiaries",
+      badge: "Objective 1",
     },
     {
       id: "action-upload-photo",
       title: "Upload Verification Photo",
-      description: "Submit geotagged camera inspection photo for validation.",
+      description: "Submit geotagged farm photos for GPS and metadata validation.",
       icon: Camera,
-      phase: "Objective 2",
+      href: "/staff/photo-verification",
+      badge: "Objective 2",
     },
     {
       id: "action-issue-stock",
       title: "Issue FIFO Commodity",
-      description: "Record warehouse distribution slip using oldest active batch.",
+      description: "Record warehouse distribution slips using oldest active batch.",
       icon: PackagePlus,
-      phase: "Objective 4",
+      href: "/staff/inventory?tab=distribute",
+      badge: "Objective 4",
     },
     {
       id: "action-file-damage",
       title: "File Field Damage Report",
-      description: "Document calamity impact and initiate PCIC claim intake.",
+      description: "Document calamity impact, AI scan photo evidence, and evaluate farmer claim.",
       icon: FilePlus2,
-      phase: "Objective 6",
+      href: "/staff/photo-verification/new",
+      badge: "Objective 6",
     },
   ];
 
@@ -49,30 +53,29 @@ export const StaffQuickActions: React.FC = () => {
         {actions.map((act) => {
           const Icon = act.icon;
           return (
-            <div
+            <Link
               key={act.id}
-              className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-50 transition-colors"
+              href={act.href}
+              className="flex items-center justify-between p-3 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-sky-50/60 hover:border-sky-200 transition-colors group"
             >
               <div className="flex items-center gap-3 min-w-0 pr-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-100 text-sky-800 shrink-0">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-100 text-sky-800 shrink-0 group-hover:scale-105 transition-transform">
                   <Icon className="h-4 w-4" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold text-slate-800 truncate">{act.title}</p>
+                  <p className="text-xs font-semibold text-slate-800 group-hover:text-sky-900 truncate">
+                    {act.title}
+                  </p>
                   <p className="text-[11px] text-slate-500 truncate">{act.description}</p>
                 </div>
               </div>
-
-              <Button
-                variant="outline"
-                size="sm"
-                className="shrink-0 text-[11px] h-7 px-2.5 opacity-80 cursor-not-allowed"
-                disabled
-                aria-label={`${act.title} (${act.phase})`}
-              >
-                {act.phase}
-              </Button>
-            </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] font-semibold text-sky-700 bg-sky-100/70 px-2 py-0.5 rounded-md">
+                  {act.badge}
+                </span>
+                <ArrowRight className="h-3.5 w-3.5 text-slate-400 group-hover:text-sky-700 group-hover:translate-x-0.5 transition-all" />
+              </div>
+            </Link>
           );
         })}
       </CardContent>

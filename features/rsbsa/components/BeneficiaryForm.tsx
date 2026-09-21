@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
@@ -22,6 +22,7 @@ import {
   Compass,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { generateRsbsaNumber } from "@/features/rsbsa/lib/rsbsaUtils";
 
 const POLOMOLOK_BARANGAYS = [
   "Bentung",
@@ -70,7 +71,7 @@ export const BeneficiaryForm: React.FC<BeneficiaryFormProps> = ({
     middleName: initialData?.middleName || "",
     lastName: initialData?.lastName || "",
     extensionName: initialData?.extensionName || "",
-    rsbsaNumber: initialData?.rsbsaNumber || "",
+    // rsbsaNumber is auto-generated — not stored here for new registrations
     farmerCode: initialData?.farmerCode || "",
     barangay: initialData?.barangay || "Poblacion",
     municipality: initialData?.municipality || "Polomolok",
@@ -88,6 +89,20 @@ export const BeneficiaryForm: React.FC<BeneficiaryFormProps> = ({
     isIp: initialData?.isIp || false,
   });
 
+  // Auto-generated RSBSA number — generated client-side only to avoid hydration mismatch.
+  // For edits, we preserve the existing number; for new registrations it is freshly generated.
+  const [generatedRsbsaNumber, setGeneratedRsbsaNumber] = useState<string>(
+    initialData?.rsbsaNumber || ""
+  );
+
+  useEffect(() => {
+    if (!initialData?.rsbsaNumber) {
+      // Only runs on client after mount — safe from SSR hydration mismatch
+      setGeneratedRsbsaNumber(generateRsbsaNumber(formData.barangay || "Poblacion"));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -95,6 +110,12 @@ export const BeneficiaryForm: React.FC<BeneficiaryFormProps> = ({
     if (type === "checkbox") {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData((prev) => ({ ...prev, [name]: checked }));
+    } else if (name === "barangay") {
+      setFormData((prev) => ({ ...prev, barangay: value }));
+      // Regenerate the RSBSA number when barangay changes (for new registrations)
+      if (!initialData?.rsbsaNumber) {
+        setGeneratedRsbsaNumber(generateRsbsaNumber(value));
+      }
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
@@ -112,7 +133,7 @@ export const BeneficiaryForm: React.FC<BeneficiaryFormProps> = ({
 
     const payload: any = {
       ...formData,
-      rsbsaNumber: formData.rsbsaNumber.trim() || null,
+      rsbsaNumber: generatedRsbsaNumber || generateRsbsaNumber(formData.barangay || "Poblacion"),
       farmerCode: formData.farmerCode.trim() || null,
       middleName: formData.middleName.trim() || null,
       extensionName: formData.extensionName.trim() || null,
@@ -208,24 +229,27 @@ export const BeneficiaryForm: React.FC<BeneficiaryFormProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {/* RSBSA Reference Number */}
+            {/* RSBSA System Number — Auto-generated, read-only */}
             <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                RSBSA System Number <span className="text-slate-400 font-normal lowercase">(optional)</span>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                RSBSA System Number
               </label>
-              <div className="relative flex items-center rounded-lg border border-slate-200 bg-slate-50/60 focus-within:bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
-                <span className="pl-2.5 text-slate-400">
+              <div className="relative flex items-center rounded-lg border border-emerald-200 bg-emerald-50/40">
+                <span className="pl-2.5 text-emerald-600 shrink-0">
                   <Hash className="h-3.5 w-3.5" />
                 </span>
-                <input
-                  type="text"
-                  name="rsbsaNumber"
-                  value={formData.rsbsaNumber}
-                  onChange={handleChange}
-                  placeholder="12-63-14-XXX-XXXXXX"
-                  className="w-full bg-transparent px-2.5 py-1.5 text-xs font-mono font-medium text-slate-900 placeholder-slate-400 outline-none"
-                />
+                <span className="w-full px-2.5 py-1.5 text-xs font-mono font-bold text-slate-800 select-all truncate">
+                  {generatedRsbsaNumber || (
+                    <span className="text-slate-400 font-normal">Generating…</span>
+                  )}
+                </span>
+                <span className="pr-2.5 shrink-0">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+                </span>
               </div>
+              <p className="mt-0.5 text-[9px] text-slate-400 leading-tight">
+                Auto-generated upon barangay selection. Cannot be manually edited.
+              </p>
             </div>
 
             {/* Farmer Code / Work Designation */}

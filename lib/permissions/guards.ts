@@ -96,7 +96,7 @@ export async function assertRoleAccess(allowedRole: UserRole): Promise<UserSessi
     if (session.role === "OMAG_HEAD") {
       redirect("/head/dashboard");
     } else if (session.role === "OMAG_STAFF") {
-      redirect("/staff/dashboard");
+      redirect("/staff/beneficiaries");
     } else {
       redirect("/login");
     }

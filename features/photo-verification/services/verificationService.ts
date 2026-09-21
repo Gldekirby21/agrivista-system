@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/database/prisma";
+import { prisma, withDbRetry } from "@/lib/database/prisma";
 import { logAuditEvent } from "@/lib/audit/auditLog";
 import { extractExifMetadata } from "./exifExtractor";
 import { verifyPhotoMetadata } from "./deterministicVerifier";
@@ -10,8 +10,16 @@ import {
   SystemReviewInput,
   QueryVerificationInput,
 } from "../validation/schemas";
-import { PhotoVerificationListItem } from "../types";
+import {
+  PhotoVerificationListItem,
+  VerificationStatusType,
+  CropLossCaseVerificationListItem,
+  CasePhotoSummaryItem,
+  ConsolidatedCaseDossierDTO,
+} from "../types";
 import { Prisma } from "@prisma/client";
+import * as fs from "fs";
+import * as path from "path";
 
 /**
  * Creates and uploads a new PhotoVerification record
@@ -41,6 +49,42 @@ export async function createPhotoVerification(
   const targetFarmId = input.farmId || parcel.farmId;
   const targetFarmerId = input.farmerId || parcel.farm.farmerId;
 
+  // Server-side validation of optional Crop-Loss Case link (Objective #6 integration)
+  let validatedDamageReportId: number | null = null;
+  if (input.damageReportId) {
+    const damageReport = await prisma.damageReport.findUnique({
+      where: { id: input.damageReportId },
+      include: {
+        parcel: { include: { farm: true } },
+        farmer: true,
+      },
+    });
+
+    if (!damageReport) {
+      throw new Error(`Crop-loss case (DamageReport ID ${input.damageReportId}) not found.`);
+    }
+
+    if (damageReport.farmerId !== targetFarmerId) {
+      throw new Error(
+        `Farmer mismatch: Selected photo farmer (ID ${targetFarmerId}) does not match Crop-Loss Case farmer (ID ${damageReport.farmerId}).`
+      );
+    }
+
+    if (damageReport.parcelId !== parcel.id) {
+      throw new Error(
+        `Parcel mismatch: Selected photo parcel (ID ${parcel.id}) does not match Crop-Loss Case parcel (ID ${damageReport.parcelId}).`
+      );
+    }
+
+    if (input.farmId && damageReport.parcel.farmId !== targetFarmId) {
+      throw new Error(
+        `Farm mismatch: Selected photo farm (ID ${targetFarmId}) does not match Crop-Loss Case farm (ID ${damageReport.parcel.farmId}).`
+      );
+    }
+
+    validatedDamageReportId = damageReport.id;
+  }
+
   // Ensure uploadedById is a valid User foreign key
   let validUserId: string | null = userId;
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
@@ -60,6 +104,7 @@ export async function createPhotoVerification(
       farmerId: targetFarmerId,
       farmId: targetFarmId,
       parcelId: parcel.id,
+      damageReportId: validatedDamageReportId,
       storageProvider: "LOCAL",
       bucketName: "agrivista-verifications",
       storageKey,
@@ -74,13 +119,32 @@ export async function createPhotoVerification(
       thresholdMeters: Number(process.env.PHOTO_GPS_TOLERANCE_METERS || 500.0),
       verifiedById: validUserId,
       systemReviewStatus: "PENDING",
+      metadataJson: input.base64Data ? ({ photoBase64: input.base64Data } as Prisma.InputJsonValue) : undefined,
     },
     include: {
       farmer: true,
       farm: true,
       parcel: true,
+      damageReport: true,
     },
   });
+
+  if (input.base64Data) {
+    try {
+      const uploadsDir = path.join(process.cwd(), "public", "uploads", "verifications");
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      let base64Clean = input.base64Data;
+      if (base64Clean.startsWith("data:")) {
+        base64Clean = base64Clean.split(",")[1] || "";
+      }
+      const buffer = Buffer.from(base64Clean, "base64");
+      fs.writeFileSync(path.join(uploadsDir, `${record.id}.jpg`), buffer);
+    } catch (e) {
+      console.error("Failed to write verification photo to disk:", e);
+    }
+  }
 
   await logAuditEvent({
     userId: validUserId,
@@ -92,6 +156,7 @@ export async function createPhotoVerification(
       id: record.id,
       farmerId: record.farmerId,
       parcelId: record.parcelId,
+      damageReportId: record.damageReportId,
       fileName: record.originalFileName,
       fileSizeBytes: record.fileSizeBytes,
     },
@@ -155,6 +220,32 @@ export async function extractAndVerifyPhoto(
     thresholdMeters,
   });
 
+  const existingMeta = (existing.metadataJson as Record<string, any>) || {};
+  const photoBase64 = options?.base64Data || existingMeta?.photoBase64;
+
+  if (options?.base64Data) {
+    try {
+      const uploadsDir = path.join(process.cwd(), "public", "uploads", "verifications");
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      let base64Clean = options.base64Data;
+      if (base64Clean.startsWith("data:")) {
+        base64Clean = base64Clean.split(",")[1] || "";
+      }
+      const buffer = Buffer.from(base64Clean, "base64");
+      fs.writeFileSync(path.join(uploadsDir, `${id}.jpg`), buffer);
+    } catch (e) {
+      console.error("Failed to write verification photo to disk in extractAndVerifyPhoto:", e);
+    }
+  }
+
+  const mergedMetadataJson = {
+    ...((rawMetadataJson as Record<string, any>) || {}),
+    ...existingMeta,
+    ...(photoBase64 ? { photoBase64 } : {}),
+  };
+
   // 3. Persist deterministic verification state
   const updated = await prisma.photoVerification.update({
     where: { id },
@@ -174,7 +265,7 @@ export async function extractAndVerifyPhoto(
       timestampStatus: evidence.timestampStatus,
       failureReasonCode: evidence.failureReasonCode,
       verificationNotes: evidence.verificationNotes,
-      metadataJson: rawMetadataJson,
+      metadataJson: mergedMetadataJson as Prisma.InputJsonValue,
     },
     include: {
       farmer: true,
@@ -199,11 +290,17 @@ export async function extractAndVerifyPhoto(
       gpsStatus: updated.gpsStatus,
       calculatedDistanceMeters: updated.calculatedDistanceMeters,
       thresholdMeters: updated.thresholdMeters,
-      deterministicStatus: evidence.deterministicStatus,
     },
   });
 
-  return updated;
+  // 4. Automatically run Gemini AI Advisory Assessment
+  try {
+    const aiAssessed = await runAiAssessmentForRecord(id, userId, roleSnapshot);
+    return aiAssessed;
+  } catch (aiErr) {
+    console.warn("Automated AI Advisory assessment notice (safe fallback):", aiErr);
+    return updated;
+  }
 }
 
 /**
@@ -339,6 +436,66 @@ export async function submitSystemReview(
 }
 
 /**
+ * Links or unlinks a PhotoVerification record to/from a Crop-Loss DamageReport.
+ * Validates that beneficiary farmer and parcel match authoritatively.
+ */
+export async function linkPhotoToDamageReport(
+  photoId: string,
+  damageReportId: number | null,
+  userId: string,
+  roleSnapshot?: string
+) {
+  const photo = await prisma.photoVerification.findUnique({
+    where: { id: photoId },
+  });
+
+  if (!photo) {
+    throw new Error(`Photo verification record '${photoId}' not found.`);
+  }
+
+  if (damageReportId !== null) {
+    const report = await prisma.damageReport.findUnique({
+      where: { id: damageReportId },
+      include: { pcicClaim: true },
+    });
+
+    if (!report) {
+      throw new Error(`Damage Report ID ${damageReportId} not found.`);
+    }
+
+    if (report.farmerId !== photo.farmerId) {
+      throw new Error(`Mismatched beneficiary: Photo farmer (ID ${photo.farmerId}) does not match Report farmer (ID ${report.farmerId}).`);
+    }
+
+    if (report.parcelId !== photo.parcelId) {
+      throw new Error(`Mismatched parcel: Photo parcel (ID ${photo.parcelId}) does not match Report parcel (ID ${report.parcelId}).`);
+    }
+  }
+
+  const updated = await prisma.photoVerification.update({
+    where: { id: photoId },
+    data: { damageReportId },
+    include: {
+      damageReport: {
+        include: { pcicClaim: true },
+      },
+    },
+  });
+
+  await logAuditEvent({
+    userId,
+    roleSnapshot,
+    action: damageReportId ? "LINK_CLAIM" : "UNLINK_CLAIM",
+    module: "PHOTO_VERIFICATION",
+    recordId: photoId,
+    previousValues: { damageReportId: photo.damageReportId },
+    newValues: { damageReportId },
+  });
+
+  return updated;
+}
+
+/**
  * Queries paginated and filtered photo verification records
  */
 export async function getPhotoVerifications(params: Partial<QueryVerificationInput> = {}) {
@@ -382,20 +539,32 @@ export async function getPhotoVerifications(params: Partial<QueryVerificationInp
     ];
   }
 
-  const [total, records] = await Promise.all([
-    prisma.photoVerification.count({ where: whereClause }),
-    prisma.photoVerification.findMany({
-      where: whereClause,
-      skip,
-      take: limit,
-      orderBy: { createdAt: "desc" },
-      include: {
-        farmer: { select: { id: true, firstName: true, lastName: true, rsbsaNumber: true, farmerCode: true } },
-        farm: { select: { id: true, farmName: true, barangay: true } },
-        parcel: { select: { id: true, parcelNumber: true, latitude: true, longitude: true, areaHa: true } },
-      },
-    }),
-  ]);
+  const [total, records] = await withDbRetry(() =>
+    Promise.all([
+      prisma.photoVerification.count({ where: whereClause }),
+      prisma.photoVerification.findMany({
+        where: whereClause,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+        include: {
+          farmer: { select: { id: true, firstName: true, lastName: true, rsbsaNumber: true, farmerCode: true } },
+          farm: { select: { id: true, farmName: true, barangay: true } },
+          parcel: { select: { id: true, parcelNumber: true, latitude: true, longitude: true, areaHa: true } },
+          damageReport: {
+            include: {
+              crop: { select: { cropType: true } },
+              pcicClaim: {
+                include: {
+                  priorityScore: { select: { score: true, priorityLevel: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+    ])
+  );
 
   const items: PhotoVerificationListItem[] = records.map((r) => ({
     id: r.id,
@@ -430,6 +599,14 @@ export async function getPhotoVerifications(params: Partial<QueryVerificationInp
     systemReviewStatus: r.systemReviewStatus,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+    damageReportId: r.damageReportId,
+    claimId: r.damageReport?.pcicClaim?.id || null,
+    claimNumber: r.damageReport?.pcicClaim?.claimNumber || null,
+    reportNumber: r.damageReport?.reportNumber || null,
+    claimStatus: r.damageReport?.pcicClaim?.claimStatus || r.damageReport?.status || null,
+    priorityLevel: r.damageReport?.pcicClaim?.priorityScore?.priorityLevel || null,
+    cropType: r.damageReport?.crop?.cropType || null,
+    reportedDamagePercent: r.damageReport?.reportedDamagePercent ?? null,
   }));
 
   return {
@@ -444,40 +621,577 @@ export async function getPhotoVerifications(params: Partial<QueryVerificationInp
 }
 
 /**
- * Retrieves a full single PhotoVerification dossier with all relations and audit logs
+ * Deterministic aggregation rule for case-level verification status:
+ * Precedence: REJECTED / NOT_ACCEPTED > REVIEW > PENDING > ACCEPTED
+ * If 0 photos: PENDING
+ */
+export function aggregateVerificationStatus(
+  photos: { verificationStatus: string }[]
+): VerificationStatusType {
+  if (!photos || photos.length === 0) {
+    return "PENDING";
+  }
+
+  const hasRejected = photos.some(
+    (p) => p.verificationStatus === "REJECTED" || p.verificationStatus === "NOT_ACCEPTED"
+  );
+  if (hasRejected) {
+    const hasNotAccepted = photos.some((p) => p.verificationStatus === "NOT_ACCEPTED");
+    return hasNotAccepted ? "NOT_ACCEPTED" : "REJECTED";
+  }
+
+  const hasReview = photos.some((p) => p.verificationStatus === "REVIEW");
+  if (hasReview) {
+    return "REVIEW";
+  }
+
+  const hasPending = photos.some((p) => p.verificationStatus === "PENDING");
+  if (hasPending) {
+    return "PENDING";
+  }
+
+  const allAccepted = photos.every((p) => p.verificationStatus === "ACCEPTED");
+  if (allAccepted) {
+    return "ACCEPTED";
+  }
+
+  return "PENDING";
+}
+
+/**
+ * Queries paginated and filtered Crop-Loss Cases with their consolidated PhotoVerification records
+ */
+export async function getCropLossCaseVerifications(params: Partial<QueryVerificationInput> = {}) {
+  const page = Math.max(1, params.page || 1);
+  const limit = Math.min(100, Math.max(1, params.limit || 15));
+  const skip = (page - 1) * limit;
+
+  const whereClause: Prisma.DamageReportWhereInput = {};
+
+  if (params.barangay && params.barangay !== "ALL") {
+    whereClause.farmer = {
+      barangay: { equals: params.barangay, mode: "insensitive" },
+    };
+  }
+
+  if (params.caseStatus && params.caseStatus !== "ALL") {
+    whereClause.OR = [
+      { status: { equals: params.caseStatus as any } },
+      { pcicClaim: { claimStatus: { equals: params.caseStatus as any } } },
+    ];
+  }
+
+  if (params.priorityLevel && params.priorityLevel !== "ALL") {
+    (whereClause as any).pcicClaim = {
+      priorityScore: {
+        priorityLevel: { equals: params.priorityLevel as any },
+      },
+    };
+  }
+
+  if (params.search && params.search.trim().length > 0) {
+    const q = params.search.trim();
+    whereClause.OR = [
+      { reportNumber: { contains: q, mode: "insensitive" } },
+      { pcicClaim: { claimNumber: { contains: q, mode: "insensitive" } } },
+      { farmer: { firstName: { contains: q, mode: "insensitive" } } },
+      { farmer: { lastName: { contains: q, mode: "insensitive" } } },
+      { farmer: { rsbsaNumber: { contains: q, mode: "insensitive" } } },
+      { crop: { cropType: { contains: q, mode: "insensitive" } } },
+      { parcel: { parcelNumber: { contains: q, mode: "insensitive" } } },
+    ];
+  }
+
+  return await withDbRetry(async () => {
+    const [total, reports] = await Promise.all([
+      prisma.damageReport.count({ where: whereClause }),
+      prisma.damageReport.findMany({
+        where: whereClause,
+        skip,
+        take: limit,
+        orderBy: [
+          { incidentDate: "desc" },
+          { createdAt: "desc" },
+        ],
+        include: {
+          farmer: true,
+          crop: true,
+          parcel: {
+            include: { farm: true },
+          },
+          assessment: true,
+          pcicClaim: {
+            include: { priorityScore: true },
+          },
+          photoVerifications: {
+            orderBy: { createdAt: "desc" },
+            include: { verifiedBy: { select: { fullName: true } } },
+          },
+        },
+      }),
+    ]);
+
+    const mappedItems: CropLossCaseVerificationListItem[] = reports.map((r) => {
+      const photos: CasePhotoSummaryItem[] = r.photoVerifications.map((p: any) => ({
+        id: p.id,
+        originalFileName: p.originalFileName,
+        storageKey: p.storageKey,
+        mimeType: p.mimeType,
+        fileSizeBytes: p.fileSizeBytes,
+        photoTimestamp: p.photoTimestamp ? p.photoTimestamp.toISOString() : null,
+        photoLatitude: p.photoLatitude,
+        photoLongitude: p.photoLongitude,
+        photoAltitude: p.photoAltitude,
+        deviceMake: p.deviceMake,
+        deviceModel: p.deviceModel,
+        registeredLatitude: p.registeredLatitude,
+        registeredLongitude: p.registeredLongitude,
+        calculatedDistanceMeters: p.calculatedDistanceMeters,
+        thresholdMeters: p.thresholdMeters,
+        verificationStatus: p.verificationStatus,
+        gpsStatus: p.gpsStatus,
+        timestampStatus: p.timestampStatus,
+        failureReasonCode: p.failureReasonCode,
+        verificationNotes: p.verificationNotes,
+        aiAssessment: p.aiAssessment,
+        aiRecommendation: p.aiRecommendation,
+        aiReviewRequired: p.aiReviewRequired,
+        aiExplanation: p.aiExplanation,
+        aiAuditNote: p.aiAuditNote,
+        aiConfidence: p.aiConfidence,
+        aiConflict: p.aiConflict,
+        aiModelUsed: p.aiModelUsed,
+        aiAssessedAt: p.aiAssessedAt ? p.aiAssessedAt.toISOString() : null,
+        systemReviewStatus: p.systemReviewStatus,
+        systemReviewNotes: p.systemReviewNotes,
+        createdAt: p.createdAt.toISOString(),
+        verifiedByName: p.verifiedBy?.fullName || null,
+      }));
+
+      const consolidatedVerificationStatus = aggregateVerificationStatus(photos);
+
+      return {
+        id: r.id,
+        reportNumber: r.reportNumber,
+        claimId: r.pcicClaim?.id || null,
+        claimNumber: r.pcicClaim?.claimNumber || null,
+        farmerId: r.farmerId,
+        farmerName: `${r.farmer.firstName} ${r.farmer.lastName}`,
+        farmerRsbsa: r.farmer.rsbsaNumber,
+        farmerCode: r.farmer.farmerCode,
+        farmId: r.parcel.farmId,
+        farmName: r.parcel.farm?.farmName || null,
+        barangay: r.farmer.barangay,
+        parcelId: r.parcelId,
+        parcelNumber: r.parcel.parcelNumber,
+        parcelAreaHa: r.parcel.areaHa,
+        parcelLatitude: r.parcel.latitude,
+        parcelLongitude: r.parcel.longitude,
+        cropId: r.cropId,
+        cropType: r.crop.cropType,
+        variety: r.crop.variety,
+        plantedAreaHa: r.crop.plantedAreaHa,
+        incidentDate: r.incidentDate.toISOString(),
+        calamityType: r.calamityType,
+        reportedDamagePercent: r.reportedDamagePercent,
+        assessedDamagePercent: r.assessment?.assessedDamagePercent ?? null,
+        reportedAffectedAreaHa: r.reportedAffectedAreaHa,
+        narrativeDescription: r.narrativeDescription,
+        caseStatus: r.pcicClaim?.claimStatus || r.status,
+        dateReported: r.createdAt.toISOString(),
+        photoCount: photos.length,
+        photos,
+        consolidatedVerificationStatus,
+        priorityScore: r.pcicClaim?.priorityScore?.score ?? null,
+        priorityLevel: r.pcicClaim?.priorityScore?.priorityLevel ?? null,
+        rankPosition: r.pcicClaim?.priorityScore?.rankPosition ?? null,
+        insurancePolicyNo: r.pcicClaim?.insurancePolicyNo ?? null,
+        coordinationRemarks: r.pcicClaim?.remarks ?? null,
+      };
+    });
+
+    // If verificationStatus filter is applied, filter on the aggregated status
+    const filteredItems = params.status && params.status !== "ALL"
+      ? mappedItems.filter((i) => i.consolidatedVerificationStatus.toUpperCase() === params.status!.toUpperCase())
+      : mappedItems;
+
+    return {
+      items: filteredItems,
+      pagination: {
+        page,
+        limit,
+        total: params.status && params.status !== "ALL" ? filteredItems.length : total,
+        totalPages: Math.ceil((params.status && params.status !== "ALL" ? filteredItems.length : total) / limit) || 1,
+      },
+    };
+  });
+}
+
+/**
+ * Retrieves full unified case dossier with all linked photos, metadata, priority, and audit logs
+ */
+export async function getConsolidatedCaseDossier(identifier: string): Promise<ConsolidatedCaseDossierDTO | null> {
+  return await withDbRetry(async () => {
+    let report: any = null;
+
+    // 1. Try numeric DamageReport ID
+    const numId = Number(identifier);
+    if (!isNaN(numId) && numId > 0 && !identifier.includes("-")) {
+      report = await prisma.damageReport.findUnique({
+        where: { id: numId },
+        include: {
+          farmer: true,
+          crop: true,
+          parcel: { include: { farm: true } },
+          assessment: true,
+          pcicClaim: { include: { priorityScore: true } },
+          photoVerifications: {
+            orderBy: { createdAt: "desc" },
+            include: { verifiedBy: { select: { id: true, fullName: true, role: true } } },
+          },
+        },
+      });
+    }
+
+    // 2. Try reportNumber if starts with "DR-"
+    if (!report && identifier.startsWith("DR-")) {
+      report = await prisma.damageReport.findUnique({
+        where: { reportNumber: identifier },
+        include: {
+          farmer: true,
+          crop: true,
+          parcel: { include: { farm: true } },
+          assessment: true,
+          pcicClaim: { include: { priorityScore: true } },
+          photoVerifications: {
+            orderBy: { createdAt: "desc" },
+            include: { verifiedBy: { select: { id: true, fullName: true, role: true } } },
+          },
+        },
+      });
+    }
+
+    // 3. Try claimNumber if starts with "PCIC-"
+    if (!report && identifier.startsWith("PCIC-")) {
+      const claim = await prisma.pcicClaim.findUnique({
+        where: { claimNumber: identifier },
+        select: { reportId: true },
+      });
+      if (claim?.reportId) {
+        return getConsolidatedCaseDossier(String(claim.reportId));
+      }
+    }
+
+    // 4. Try UUID lookup: Check if it's a PhotoVerification ID
+    if (!report && identifier.length >= 30) {
+      const photo = await prisma.photoVerification.findUnique({
+        where: { id: identifier },
+        include: {
+          farmer: true,
+          farm: true,
+          parcel: { include: { crops: true, farm: true } },
+          damageReport: {
+            include: {
+              farmer: true,
+              crop: true,
+              parcel: { include: { farm: true } },
+              assessment: true,
+              pcicClaim: { include: { priorityScore: true } },
+              photoVerifications: {
+                orderBy: { createdAt: "desc" },
+                include: { verifiedBy: { select: { id: true, fullName: true, role: true } } },
+              },
+            },
+          },
+        },
+      });
+
+      if (photo?.damageReport) {
+        report = photo.damageReport;
+      } else if (photo) {
+        // Standalone photo with no attached damage report: construct dossier wrapping this photo
+        const auditLogs = await prisma.auditLog.findMany({
+          where: { module: "PHOTO_VERIFICATION", recordId: photo.id },
+          orderBy: { timestamp: "desc" },
+          include: { user: { select: { fullName: true, username: true, role: true } } },
+        });
+
+        const photoSummary: CasePhotoSummaryItem = {
+          id: photo.id,
+          originalFileName: photo.originalFileName,
+          storageKey: photo.storageKey,
+          mimeType: photo.mimeType,
+          fileSizeBytes: photo.fileSizeBytes,
+          photoTimestamp: photo.photoTimestamp ? photo.photoTimestamp.toISOString() : null,
+          photoLatitude: photo.photoLatitude,
+          photoLongitude: photo.photoLongitude,
+          photoAltitude: photo.photoAltitude,
+          deviceMake: photo.deviceMake,
+          deviceModel: photo.deviceModel,
+          registeredLatitude: photo.registeredLatitude,
+          registeredLongitude: photo.registeredLongitude,
+          calculatedDistanceMeters: photo.calculatedDistanceMeters,
+          thresholdMeters: photo.thresholdMeters,
+          verificationStatus: photo.verificationStatus,
+          gpsStatus: photo.gpsStatus,
+          timestampStatus: photo.timestampStatus,
+          failureReasonCode: photo.failureReasonCode,
+          verificationNotes: photo.verificationNotes,
+          aiAssessment: photo.aiAssessment,
+          aiRecommendation: photo.aiRecommendation,
+          aiReviewRequired: photo.aiReviewRequired,
+          aiExplanation: photo.aiExplanation,
+          aiAuditNote: photo.aiAuditNote,
+          aiConfidence: photo.aiConfidence,
+          aiConflict: photo.aiConflict,
+          aiModelUsed: photo.aiModelUsed,
+          aiAssessedAt: photo.aiAssessedAt ? photo.aiAssessedAt.toISOString() : null,
+          systemReviewStatus: photo.systemReviewStatus,
+          systemReviewNotes: photo.systemReviewNotes,
+          createdAt: photo.createdAt.toISOString(),
+          verifiedByName: null,
+        };
+
+        const primaryCrop = photo.parcel?.crops?.[0];
+
+        return {
+          id: 0,
+          reportNumber: `STANDALONE-${photo.id.slice(0, 8)}`,
+          claimId: null,
+          claimNumber: null,
+          farmerId: photo.farmerId,
+          farmerName: `${photo.farmer.firstName} ${photo.farmer.lastName}`,
+          farmerRsbsa: photo.farmer.rsbsaNumber,
+          farmerCode: photo.farmer.farmerCode,
+          farmId: photo.farmId,
+          farmName: photo.farm.farmName,
+          barangay: photo.farm.barangay,
+          parcelId: photo.parcelId,
+          parcelNumber: photo.parcel.parcelNumber,
+          parcelAreaHa: photo.parcel.areaHa,
+          parcelLatitude: photo.registeredLatitude ?? photo.parcel.latitude,
+          parcelLongitude: photo.registeredLongitude ?? photo.parcel.longitude,
+          cropId: primaryCrop?.id || 0,
+          cropType: primaryCrop?.cropType || "Registered Farmland",
+          variety: primaryCrop?.variety || null,
+          plantedAreaHa: primaryCrop?.plantedAreaHa || photo.parcel.areaHa,
+          incidentDate: photo.photoTimestamp ? photo.photoTimestamp.toISOString() : photo.createdAt.toISOString(),
+          calamityType: "Field Verification Audit",
+          reportedDamagePercent: 0,
+          assessedDamagePercent: null,
+          reportedAffectedAreaHa: photo.parcel.areaHa,
+          narrativeDescription: photo.verificationNotes,
+          caseStatus: photo.systemReviewStatus || "PENDING",
+          dateReported: photo.createdAt.toISOString(),
+          photoCount: 1,
+          photos: [photoSummary],
+          consolidatedVerificationStatus: photo.verificationStatus as VerificationStatusType,
+          priorityScore: null,
+          priorityLevel: null,
+          rankPosition: null,
+          insurancePolicyNo: null,
+          coordinationRemarks: photo.systemReviewNotes,
+          assessment: null,
+          priorityFormula: null,
+          auditLogs: auditLogs.map((l) => ({
+            id: l.id,
+            action: l.action,
+            module: l.module,
+            timestamp: l.timestamp.toISOString(),
+            roleSnapshot: l.roleSnapshot,
+            user: l.user,
+            newValues: l.newValues,
+            previousValues: l.previousValues,
+          })),
+        };
+      }
+    }
+
+    if (!report) return null;
+
+    // Fetch unified audit logs for the case, claim, and all linked photos
+    const relatedRecordIds: string[] = [
+      String(report.id),
+      ...(report.pcicClaim ? [report.pcicClaim.id] : []),
+      ...report.photoVerifications.map((p: any) => p.id),
+    ];
+
+    const auditLogs = await prisma.auditLog.findMany({
+      where: {
+        recordId: { in: relatedRecordIds },
+      },
+      orderBy: { timestamp: "desc" },
+      include: {
+        user: { select: { fullName: true, username: true, role: true } },
+      },
+    });
+
+    const photos: CasePhotoSummaryItem[] = report.photoVerifications.map((p: any) => ({
+      id: p.id,
+      originalFileName: p.originalFileName,
+      storageKey: p.storageKey,
+      mimeType: p.mimeType,
+      fileSizeBytes: p.fileSizeBytes,
+      photoTimestamp: p.photoTimestamp ? p.photoTimestamp.toISOString() : null,
+      photoLatitude: p.photoLatitude,
+      photoLongitude: p.photoLongitude,
+      photoAltitude: p.photoAltitude,
+      deviceMake: p.deviceMake,
+      deviceModel: p.deviceModel,
+      registeredLatitude: p.registeredLatitude,
+      registeredLongitude: p.registeredLongitude,
+      calculatedDistanceMeters: p.calculatedDistanceMeters,
+      thresholdMeters: p.thresholdMeters,
+      verificationStatus: p.verificationStatus,
+      gpsStatus: p.gpsStatus,
+      timestampStatus: p.timestampStatus,
+      failureReasonCode: p.failureReasonCode,
+      verificationNotes: p.verificationNotes,
+      aiAssessment: p.aiAssessment,
+      aiRecommendation: p.aiRecommendation,
+      aiReviewRequired: p.aiReviewRequired,
+      aiExplanation: p.aiExplanation,
+      aiAuditNote: p.aiAuditNote,
+      aiConfidence: p.aiConfidence,
+      aiConflict: p.aiConflict,
+      aiModelUsed: p.aiModelUsed,
+      aiAssessedAt: p.aiAssessedAt ? p.aiAssessedAt.toISOString() : null,
+      systemReviewStatus: p.systemReviewStatus,
+      systemReviewNotes: p.systemReviewNotes,
+      createdAt: p.createdAt.toISOString(),
+      verifiedByName: p.verifiedBy?.fullName || null,
+    }));
+
+    const consolidatedVerificationStatus = aggregateVerificationStatus(photos);
+    const formulaBreakdown = report.pcicClaim?.priorityScore?.formulaBreakdown as any;
+
+    return {
+      id: report.id,
+      reportNumber: report.reportNumber,
+      claimId: report.pcicClaim?.id || null,
+      claimNumber: report.pcicClaim?.claimNumber || null,
+      farmerId: report.farmerId,
+      farmerName: `${report.farmer.firstName} ${report.farmer.lastName}`,
+      farmerRsbsa: report.farmer.rsbsaNumber,
+      farmerCode: report.farmer.farmerCode,
+      farmId: report.parcel.farmId,
+      farmName: report.parcel.farm?.farmName || null,
+      barangay: report.farmer.barangay,
+      parcelId: report.parcelId,
+      parcelNumber: report.parcel.parcelNumber,
+      parcelAreaHa: report.parcel.areaHa,
+      parcelLatitude: report.parcel.latitude,
+      parcelLongitude: report.parcel.longitude,
+      cropId: report.cropId,
+      cropType: report.crop.cropType,
+      variety: report.crop.variety,
+      plantedAreaHa: report.crop.plantedAreaHa,
+      incidentDate: report.incidentDate.toISOString(),
+      calamityType: report.calamityType,
+      reportedDamagePercent: report.reportedDamagePercent,
+      assessedDamagePercent: report.assessment?.assessedDamagePercent ?? null,
+      reportedAffectedAreaHa: report.reportedAffectedAreaHa,
+      narrativeDescription: report.narrativeDescription,
+      caseStatus: report.pcicClaim?.claimStatus || report.status,
+      dateReported: report.createdAt.toISOString(),
+      photoCount: photos.length,
+      photos,
+      consolidatedVerificationStatus,
+      priorityScore: report.pcicClaim?.priorityScore?.score ?? null,
+      priorityLevel: report.pcicClaim?.priorityScore?.priorityLevel ?? null,
+      rankPosition: report.pcicClaim?.priorityScore?.rankPosition ?? null,
+      insurancePolicyNo: report.pcicClaim?.insurancePolicyNo ?? null,
+      coordinationRemarks: report.pcicClaim?.remarks ?? null,
+      assessment: report.assessment
+        ? {
+            id: report.assessment.id,
+            assessedDamagePercent: report.assessment.assessedDamagePercent,
+            assessedAreaHa: report.assessment.assessedAreaHa,
+            cropStage: report.assessment.cropStage,
+            assessorNotes: report.assessment.assessorNotes,
+            assessedAt: report.assessment.assessedAt.toISOString(),
+          }
+        : null,
+      priorityFormula: formulaBreakdown
+        ? {
+            damageBasis: formulaBreakdown.damageBasis || (report.assessment ? "ASSESSED" : "REPORTED"),
+            applicableDamagePercent: formulaBreakdown.applicableDamagePercent || report.reportedDamagePercent,
+            daysElapsed: formulaBreakdown.daysElapsed || 0,
+            explanation: formulaBreakdown.explanation || "",
+          }
+        : null,
+      auditLogs: auditLogs.map((l) => ({
+        id: l.id,
+        action: l.action,
+        module: l.module,
+        timestamp: l.timestamp.toISOString(),
+        roleSnapshot: l.roleSnapshot,
+        user: l.user,
+        newValues: l.newValues,
+        previousValues: l.previousValues,
+      })),
+    };
+  });
+}
+
+/**
+ * Retrieves a full single PhotoVerification dossier with all relations and audit logs.
+ * If identifier is a case id or starts with "DR-", redirects to consolidated case loader.
  */
 export async function getPhotoVerificationById(id: string) {
-  const record = await prisma.photoVerification.findUnique({
-    where: { id },
-    include: {
-      farmer: true,
-      farm: true,
-      parcel: {
-        include: {
-          crops: { where: { status: { not: "Archived" } } },
+  // If id is numeric or starts with DR- or PCIC-, resolve via getConsolidatedCaseDossier
+  const numId = Number(id);
+  if ((!isNaN(numId) && numId > 0 && !id.includes("-")) || id.startsWith("DR-") || id.startsWith("PCIC-")) {
+    return await getConsolidatedCaseDossier(id);
+  }
+
+  return await withDbRetry(async () => {
+    const record = await prisma.photoVerification.findUnique({
+      where: { id },
+      include: {
+        farmer: true,
+        farm: true,
+        parcel: {
+          include: {
+            crops: { where: { status: { not: "Archived" } } },
+          },
+        },
+        damageReport: {
+          include: {
+            crop: true,
+            assessment: true,
+            pcicClaim: { include: { priorityScore: true } },
+            photoVerifications: {
+              orderBy: { createdAt: "desc" },
+              include: { verifiedBy: { select: { id: true, fullName: true, role: true } } },
+            },
+          },
+        },
+        verifiedBy: {
+          select: { id: true, fullName: true, role: true },
         },
       },
-      verifiedBy: {
-        select: { id: true, fullName: true, role: true },
+    });
+
+    if (!record) {
+      // Fallback check: could this be a case identifier?
+      return await getConsolidatedCaseDossier(id);
+    }
+
+    const auditLogs = await prisma.auditLog.findMany({
+      where: {
+        module: "PHOTO_VERIFICATION",
+        recordId: id,
       },
-    },
+      orderBy: { timestamp: "desc" },
+      include: {
+        user: { select: { id: true, fullName: true, role: true } },
+      },
+    });
+
+    return {
+      ...record,
+      auditLogs,
+    };
   });
-
-  if (!record) return null;
-
-  const auditLogs = await prisma.auditLog.findMany({
-    where: {
-      module: "PHOTO_VERIFICATION",
-      recordId: id,
-    },
-    orderBy: { timestamp: "desc" },
-    include: {
-      user: { select: { id: true, fullName: true, role: true } },
-    },
-  });
-
-  return {
-    ...record,
-    auditLogs,
-  };
 }

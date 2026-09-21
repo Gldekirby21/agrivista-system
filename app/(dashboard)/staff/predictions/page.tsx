@@ -6,8 +6,8 @@ import { requireRole } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Yield & Loss Prediction | OMAG Polomolok",
-  description: "Machine-learning-based crop yield and economic loss estimation for agricultural planning.",
+  title: "Crop Yield & Loss Prediction | OMAG Polomolok",
+  description: "ML-based crop yield and economic loss prediction for field operations and agricultural planning.",
 };
 
 export default async function StaffPredictionsPage() {
@@ -16,8 +16,8 @@ export default async function StaffPredictionsPage() {
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <Header
-        title="Crop Yield & Loss Analytics"
-        subtitle="Machine learning regression model for projected yield reduction and potential economic loss."
+        title="Yield & Loss Prediction"
+        subtitle="Estimate projected yield, crop reduction, and potential economic loss using machine learning."
         role="OMAG_STAFF"
       />
       <main className="flex-1 p-6 md:p-8 overflow-y-auto">

@@ -1,28 +1,31 @@
 import React from "react";
 import { Header } from "@/components/layout/header/Header";
-import { BeneficiaryForm } from "@/features/rsbsa/components/BeneficiaryForm";
+import { BeneficiaryIntakeForm } from "@/features/rsbsa/components/BeneficiaryIntakeForm";
 import { requireRole } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Register Beneficiary | OMAG Polomolok",
-  description: "Intake form for enrolling a new agricultural beneficiary in the RSBSA system.",
+  title: "New Beneficiary Registration Intake | OMAG Polomolok",
+  description: "Comprehensive agricultural intake form for registering farmer profile, farm landholding, parcel plots, crops, and land documents.",
 };
 
-export default async function NewBeneficiaryPage() {
+export default async function StaffNewBeneficiaryPage() {
   await requireRole(["OMAG_STAFF"]);
 
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <Header
-        title="Beneficiary Registration Intake"
-        subtitle="Enroll a farmer beneficiary with verified RSBSA identifiers and sector attributes."
+        title="New RSBSA Beneficiary Intake"
+        subtitle="Centralized registration of farmer profiles, farm landholdings, parcels, standing crops, and land titles."
         role="OMAG_STAFF"
       />
-      <main className="flex-1 p-6 md:p-8">
-        <div className="max-w-4xl mx-auto space-y-6">
-          <BeneficiaryForm />
+      <main className="flex-1 p-4 sm:p-6 md:p-8">
+        <div className="max-w-6xl mx-auto">
+          <BeneficiaryIntakeForm
+            baseHref="/staff/beneficiaries"
+            userRole="OMAG_STAFF"
+          />
         </div>
       </main>
     </div>

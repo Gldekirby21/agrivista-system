@@ -85,6 +85,22 @@ export interface PredictionRecordDTO {
     rmse: number;
     r2Score: number;
   } | null;
+  report?: {
+    id: number;
+    reportNumber: string;
+    incidentDate: string | Date;
+    calamityType: string;
+    reportedDamagePercent: number;
+    reportedAffectedAreaHa: number;
+    narrativeDescription?: string | null;
+    assessment?: {
+      id: string;
+      assessedDamagePercent: number;
+      assessedAreaHa: number;
+      cropStage: string;
+      assessorNotes?: string | null;
+    } | null;
+  } | null;
   projectedNormalYieldTons: number;
   predictedRemainingYieldTons: number;
   predictedYieldReductionPercent: number;

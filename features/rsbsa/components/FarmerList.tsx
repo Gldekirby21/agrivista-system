@@ -5,8 +5,6 @@ import Link from "next/link";
 import { Search, Filter, Plus, ChevronLeft, ChevronRight, Eye, User, MapPin, Sprout } from "lucide-react";
 import { Badge } from "@/components/common/Badge";
 import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/common/Modal";
-import { FarmerForm } from "./FarmerForm";
 import { FarmerListItem, POLOMOLOK_BARANGAYS } from "../types";
 
 export interface FarmerListProps {
@@ -32,7 +30,6 @@ export const FarmerList: React.FC<FarmerListProps> = ({
   const [search, setSearch] = useState("");
   const [selectedBarangay, setSelectedBarangay] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(pagination.page);
-  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,15 +92,13 @@ export const FarmerList: React.FC<FarmerListProps> = ({
           </Button>
 
           {isStaff && (
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              onClick={() => setIsRegisterModalOpen(true)}
+            <Link
+              href={baseHref.startsWith("/head") ? "/head/beneficiaries/new" : "/staff/beneficiaries/new"}
+              className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700 transition-colors whitespace-nowrap"
             >
               <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
               Register Farmer
-            </Button>
+            </Link>
           )}
         </div>
       </div>
@@ -250,22 +245,6 @@ export const FarmerList: React.FC<FarmerListProps> = ({
         </div>
       </div>
 
-      {/* Farmer Registration Modal */}
-      <Modal
-        isOpen={isRegisterModalOpen}
-        onClose={() => setIsRegisterModalOpen(false)}
-        title="RSBSA Farmer Registration"
-        subtitle="Official farmer intake and registration form for Polomolok Agricultural Operations."
-        size="3xl"
-      >
-        <FarmerForm
-          onSuccess={() => {
-            setIsRegisterModalOpen(false);
-            onFilterChange?.(search, selectedBarangay, 1);
-          }}
-          onCancel={() => setIsRegisterModalOpen(false)}
-        />
-      </Modal>
     </div>
   );
 };

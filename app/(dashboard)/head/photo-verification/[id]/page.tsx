@@ -12,8 +12,8 @@ interface PageProps {
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Photo Verification Review | OMAG Polomolok",
-  description: "Executive review of photo metadata, deterministic evidence, and AI advisory interpretation.",
+  title: "AI Metadata Verification Review | OMAG Polomolok",
+  description: "Executive review of photo metadata, deterministic evidence, and Gemini AI advisory interpretation.",
 };
 
 export default async function HeadPhotoVerificationDetailPage({ params }: PageProps) {
@@ -28,8 +28,8 @@ export default async function HeadPhotoVerificationDetailPage({ params }: PagePr
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <Header
-        title="Photo Verification Review Dossier"
-        subtitle={`Audit Record ID: ${record.id}`}
+        title="AI Metadata Verification Review Dossier"
+        subtitle={`Tamper-Proof Audit Record ID: ${record.id}`}
         role="OMAG_HEAD"
       />
       <main className="flex-1 p-6 md:p-8">

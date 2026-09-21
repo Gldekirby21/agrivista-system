@@ -8,19 +8,39 @@ export const SESSION_COOKIE_NAME = "omag_session_token";
 // Session token valid duration: 24 hours (86,400 seconds)
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24;
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET || "omag-polomolok-dev-secret-key-2026-super-secure-token"
-);
+/**
+ * Resolves the JWT signing and verification secret securely.
+ * - In production: strictly requires process.env.AUTH_SECRET; throws clear error if absent.
+ * - In non-production (development/test): uses process.env.AUTH_SECRET if provided;
+ *   otherwise falls back to an isolated development secret.
+ */
+export function getJwtSecret(): Uint8Array {
+  const secret = process.env.AUTH_SECRET;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (secret && secret.trim().length > 0) {
+    return new TextEncoder().encode(secret.trim());
+  }
+
+  if (isProduction) {
+    throw new Error(
+      "[FATAL SECURITY CONFIGURATION ERROR] AUTH_SECRET environment variable is missing in production runtime. Cannot sign or verify authentication tokens without a secure key."
+    );
+  }
+
+  return new TextEncoder().encode("omag-polomolok-dev-secret-key-2026-super-secure-token");
+}
 
 /**
  * Sign a new JWT session token
  */
 export async function signSessionToken(payload: UserSession): Promise<string> {
+  const secret = getJwtSecret();
   return await new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("24h")
-    .sign(JWT_SECRET);
+    .sign(secret);
 }
 
 /**
@@ -28,7 +48,8 @@ export async function signSessionToken(payload: UserSession): Promise<string> {
  */
 export async function verifySessionToken(token: string): Promise<UserSession | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const secret = getJwtSecret();
+    const { payload } = await jwtVerify(token, secret);
     return {
       id: payload.id as string,
       username: payload.username as string,

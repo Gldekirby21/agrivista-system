@@ -26,38 +26,38 @@ export const HeadSummaryCards: React.FC = async () => {
     {
       title: "Beneficiaries (RSBSA)",
       count: farmerCount,
-      label: farmerCount > 0 ? "Baseline records" : "No records enrolled",
+      label: farmerCount > 0 ? "Registered farmers" : "No records enrolled",
       icon: Users,
       badge: "Objective 1",
       variant: "default" as const,
-      subtext: "Synthetic Demonstration Data — Baseline",
+      subtext: "Live database count",
     },
     {
       title: "Registered Farm Parcels",
       count: parcelCount,
-      label: parcelCount > 0 ? "Baseline plots" : "No parcels mapped",
+      label: parcelCount > 0 ? "Mapped cadastral plots" : "No parcels mapped",
       icon: MapPin,
       badge: "Objective 1 & 2",
       variant: "info" as const,
-      subtext: "Synthetic Demonstration Data — Baseline",
+      subtext: "Live database count",
     },
     {
       title: "Crop Loss / PCIC Dockets",
       count: damageReportCount,
-      label: damageReportCount > 0 ? "Baseline dockets" : "No claims filed",
+      label: damageReportCount > 0 ? "Active dockets" : "No claims filed",
       icon: FileCheck2,
       badge: "Objective 6",
       variant: "warning" as const,
-      subtext: "Pending Phase Activation",
+      subtext: "Live database count",
     },
     {
       title: "Inventory Catalog Items",
       count: inventoryItemCount,
-      label: inventoryItemCount > 0 ? "Baseline catalog" : "No items cataloged",
+      label: inventoryItemCount > 0 ? "Catalog entries" : "No items cataloged",
       icon: Boxes,
       badge: "Objective 4",
       variant: "neutral" as const,
-      subtext: "Pending Phase Activation",
+      subtext: "Live database count",
     },
   ];
 
@@ -67,8 +67,8 @@ export const HeadSummaryCards: React.FC = async () => {
         <h2 id="executive-kpi-heading" className="text-sm font-bold uppercase tracking-wider text-slate-700">
           Executive Oversight Summary
         </h2>
-        <span className="text-[11px] text-amber-700 font-medium">
-          Synthetic Demonstration Data — Not Actual OMAG Records
+        <span className="text-[11px] text-slate-500 font-medium">
+          Live database totals — no fabricated data
         </span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

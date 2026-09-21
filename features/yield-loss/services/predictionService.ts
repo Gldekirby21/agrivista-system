@@ -73,7 +73,7 @@ export async function createCropPrediction(
   userId: string,
   userRole: string
 ) {
-  // 1. Verify crop exists
+  // 1. Verify crop exists and fetch full agricultural context
   const crop = await prisma.crop.findUnique({
     where: { id: input.cropId },
     include: {
@@ -86,6 +86,13 @@ export async function createCropPrediction(
           },
         },
       },
+      damageReports: {
+        include: {
+          assessment: true,
+          pcicClaim: true,
+        },
+        orderBy: { incidentDate: "desc" },
+      },
     },
   });
 
@@ -93,19 +100,93 @@ export async function createCropPrediction(
     throw new Error(`Target crop ID #${input.cropId} not found in database.`);
   }
 
-  // 2. Call Python FastAPI Service
+  if (!crop.plantedAreaHa || crop.plantedAreaHa <= 0) {
+    throw new Error(`Crop ID #${crop.id} has invalid or missing planted area in registered agricultural records.`);
+  }
+
+  // 2. Fetch authoritative municipal historical agricultural data
+  const histRecord = await prisma.historicalAgriculturalData.findFirst({
+    where: {
+      barangay: crop.parcel.farm.barangay,
+      cropType: crop.cropType,
+      status: "ACTIVE",
+    },
+    orderBy: { year: "desc" },
+  });
+
+  // Authoritative agricultural features (strictly from database records, not client input)
+  const authoritativeCropType = crop.cropType;
+  const authoritativeBarangay = crop.parcel.farm.barangay;
+  const authoritativeSeason = crop.season;
+  const authoritativeSoilType = crop.parcel.soilType || "Volcanic Loam";
+  const authoritativePlantedAreaHa = crop.plantedAreaHa;
+  const authoritativeBaselineYield =
+    crop.recordedYieldPerHa ||
+    crop.historicalYieldTons ||
+    histRecord?.averageYieldTonsHa ||
+    (input.baselineYieldTonsHa && input.baselineYieldTonsHa > 0 ? input.baselineYieldTonsHa : 4.2);
+
+  const authoritativeCalamityOccurrences =
+    histRecord?.calamityOccurrences !== undefined && histRecord.calamityOccurrences > 0
+      ? histRecord.calamityOccurrences
+      : (input.calamityOccurrences || 0);
+
+  // 3. Resolve Damage Scenario (Enforce DamageAssessment.assessedDamagePercent if formal assessment exists)
+  const linkedReport = input.reportId
+    ? crop.damageReports.find((r) => r.id === input.reportId)
+    : (crop.damageReports.length > 0 ? crop.damageReports[0] : null);
+
+  // OMAG Head Approval Gate Enforcement (PROPOSED SYSTEM DESIGN)
+  // If prediction is specifically targeting a crop-loss report, verify Head Approval
+  if (input.reportId) {
+    const claim = (linkedReport as any)?.pcicClaim || (await prisma.pcicClaim.findUnique({
+      where: { reportId: input.reportId },
+    }));
+
+    if (!claim) {
+      const err: any = new Error(`Crop-loss case (Report #${input.reportId}) does not have an associated claim record.`);
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (claim.headApprovalStatus !== "APPROVED") {
+      const err: any = new Error(
+        `Crop-loss case (Report #${input.reportId}) requires OMAG Head approval before prediction can be processed. Current status: ${claim.headApprovalStatus || "PENDING"}.`
+      );
+      err.statusCode = 403;
+      throw err;
+    }
+  }
+
+  let effectiveDamagePercent: number | null = null;
+  if (linkedReport?.assessment) {
+    // Locked to registered technical field assessment
+    effectiveDamagePercent = linkedReport.assessment.assessedDamagePercent;
+  } else if (input.calamityDamagePercent !== undefined && input.calamityDamagePercent !== null) {
+    // Current scenario input
+    effectiveDamagePercent = Math.min(100, Math.max(0, input.calamityDamagePercent));
+  } else if (linkedReport) {
+    effectiveDamagePercent = linkedReport.reportedDamagePercent;
+  }
+
+  const effectiveUnitPrice =
+    input.cropUnitPricePhpKg !== undefined && input.cropUnitPricePhpKg !== null && input.cropUnitPricePhpKg > 0
+      ? input.cropUnitPricePhpKg
+      : null;
+
+  // 4. Call Python FastAPI Service with Authoritative Payload
   let mlResult: LossPredictionResult;
   try {
     const payload = {
-      cropType: input.cropType,
-      barangay: input.barangay || crop.parcel.farm.barangay,
-      season: input.season || crop.season,
-      soilType: input.soilType || crop.parcel.soilType || "Volcanic Loam",
-      plantedAreaHa: input.plantedAreaHa || crop.plantedAreaHa,
-      baselineYieldTonsHa: input.baselineYieldTonsHa || crop.recordedYieldPerHa || crop.historicalYieldTons || null,
-      calamityDamagePercent: input.calamityDamagePercent || null,
-      cropUnitPricePhpKg: input.cropUnitPricePhpKg || null,
-      calamityOccurrences: input.calamityOccurrences || 0,
+      cropType: authoritativeCropType,
+      barangay: authoritativeBarangay,
+      season: authoritativeSeason,
+      soilType: authoritativeSoilType,
+      plantedAreaHa: authoritativePlantedAreaHa,
+      baselineYieldTonsHa: authoritativeBaselineYield,
+      calamityDamagePercent: effectiveDamagePercent,
+      cropUnitPricePhpKg: effectiveUnitPrice,
+      calamityOccurrences: authoritativeCalamityOccurrences,
     };
 
     const res = await fetch(`${ML_SERVICE_URL}/predict/loss`, {
@@ -124,13 +205,22 @@ export async function createCropPrediction(
     throw new Error(`ML Service Communication Error: ${e.message}`);
   }
 
-  // 3. Ensure Model Registry Reference
+  // 5. Ensure Model Registry Reference
   const modelRegistry = await getOrSyncActiveModelRegistry();
 
-  // 4. Persist in CropPrediction
+  // 6. Persist in CropPrediction
+  if (input.reportId) {
+    const existingPred = await prisma.cropPrediction.findUnique({
+      where: { reportId: input.reportId },
+    });
+    if (existingPred) {
+      await prisma.cropPrediction.delete({ where: { id: existingPred.id } });
+    }
+  }
+
   const prediction = await prisma.cropPrediction.create({
     data: {
-      cropId: input.cropId,
+      cropId: crop.id,
       ...(input.reportId ? { reportId: input.reportId } : {}),
       modelId: modelRegistry.id,
       projectedNormalYieldTons: mlResult.projectedNormalTotalTons,
@@ -138,14 +228,18 @@ export async function createCropPrediction(
       predictedYieldReductionPercent: mlResult.predictedYieldReductionPercent ?? 0.0,
       estimatedEconomicLossPhp: mlResult.estimatedEconomicLossPhp ?? 0.0,
       inputFeaturesSnapshot: {
-        cropType: input.cropType,
-        barangay: input.barangay,
-        season: input.season,
-        soilType: input.soilType,
-        plantedAreaHa: input.plantedAreaHa,
-        baselineYieldTonsHa: input.baselineYieldTonsHa,
-        calamityDamagePercent: input.calamityDamagePercent,
-        cropUnitPricePhpKg: input.cropUnitPricePhpKg,
+        cropType: authoritativeCropType,
+        variety: crop.variety || null,
+        barangay: authoritativeBarangay,
+        season: authoritativeSeason,
+        soilType: authoritativeSoilType,
+        plantedAreaHa: authoritativePlantedAreaHa,
+        baselineYieldTonsHa: authoritativeBaselineYield,
+        calamityDamagePercent: effectiveDamagePercent,
+        reportedDamagePercent: linkedReport ? linkedReport.reportedDamagePercent : null,
+        isFormalAssessmentLocked: Boolean(linkedReport?.assessment),
+        cropUnitPricePhpKg: effectiveUnitPrice,
+        calamityOccurrences: authoritativeCalamityOccurrences,
         modelVersion: mlResult.modelVersion,
         algorithm: mlResult.algorithm,
       },
@@ -306,6 +400,11 @@ export async function getPredictionById(id: string) {
         },
       },
       model: true,
+      report: {
+        include: {
+          assessment: true,
+        },
+      },
     },
   });
 

@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { POLOMOLOK_BARANGAYS, FARMER_SECTOR_CATEGORIES } from "../types";
+import { generateRsbsaNumber } from "@/features/rsbsa/lib/rsbsaUtils";
 
 export interface FarmerFormProps {
   initialData?: any;
@@ -68,6 +69,15 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
     isIp: initialData?.isIp || false,
   });
 
+  React.useEffect(() => {
+    if (!formData.rsbsaNumber && !initialData?.rsbsaNumber) {
+      setFormData((prev) => ({
+        ...prev,
+        rsbsaNumber: generateRsbsaNumber(prev.barangay || "Poblacion"),
+      }));
+    }
+  }, [initialData?.rsbsaNumber]);
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
@@ -75,6 +85,18 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
     if (type === "checkbox") {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData((prev) => ({ ...prev, [name]: checked }));
+    } else if (name === "barangay") {
+      setFormData((prev) => {
+        const shouldRegenerate =
+          !initialData?.rsbsaNumber || prev.rsbsaNumber.startsWith("12-63-14-");
+        return {
+          ...prev,
+          barangay: value,
+          rsbsaNumber: shouldRegenerate
+            ? generateRsbsaNumber(value)
+            : prev.rsbsaNumber,
+        };
+      });
     } else {
       setFormData((prev) => ({ ...prev, [name]: value }));
     }
@@ -92,7 +114,9 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
 
     const payload: any = {
       ...formData,
-      rsbsaNumber: formData.rsbsaNumber.trim() || null,
+      rsbsaNumber:
+        formData.rsbsaNumber.trim() ||
+        generateRsbsaNumber(formData.barangay || "Poblacion"),
       middleName: formData.middleName.trim() || null,
       extensionName: formData.extensionName.trim() || null,
       contactNumber: formData.contactNumber.trim() || null,
@@ -201,6 +225,9 @@ export const FarmerForm: React.FC<FarmerFormProps> = ({
                   value={formData.rsbsaNumber}
                   onChange={handleChange}
                   placeholder="12-63-14-XXX-XXXXXX"
+                  required
+                  autoComplete="off"
+                  suppressHydrationWarning
                   className="w-full bg-transparent px-2.5 py-1.5 text-xs font-mono font-medium text-slate-900 placeholder-slate-400 outline-none"
                 />
               </div>

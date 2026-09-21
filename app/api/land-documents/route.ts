@@ -24,6 +24,22 @@ export async function GET(req: NextRequest) {
       uploadedBy: {
         select: { id: true, fullName: true, role: true },
       },
+      farmer: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          rsbsaNumber: true,
+          barangay: true,
+        },
+      },
+      farm: {
+        select: {
+          id: true,
+          farmName: true,
+          barangay: true,
+        },
+      },
     },
   });
 

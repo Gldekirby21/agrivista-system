@@ -78,6 +78,7 @@ export async function GET(req: NextRequest) {
   ]);
 
   return NextResponse.json({
+    success: true,
     data: predictions,
     pagination: {
       total,
@@ -103,7 +104,7 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     return NextResponse.json(
       { error: error?.message || "Failed to execute crop prediction" },
-      { status: 400 }
+      { status: error?.statusCode || 400 }
     );
   }
 }

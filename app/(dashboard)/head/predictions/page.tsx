@@ -16,8 +16,8 @@ export default async function HeadPredictionsPage() {
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <Header
-        title="Crop Yield & Loss Analytics"
-        subtitle="Executive oversight on municipal crop yield forecasts and economic damage estimations."
+        title="Dynamic Crop Yield & Loss Prediction"
+        subtitle="Estimate projected yield, crop reduction, and potential economic loss."
         role="OMAG_HEAD"
       />
       <main className="flex-1 p-6 md:p-8 overflow-y-auto">

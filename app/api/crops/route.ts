@@ -19,6 +19,41 @@ export async function GET(req: NextRequest) {
 
   const crops = await prisma.crop.findMany({
     where,
+    include: {
+      parcel: {
+        include: {
+          farm: {
+            include: {
+              farmer: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  middleName: true,
+                  lastName: true,
+                  extensionName: true,
+                  rsbsaNumber: true,
+                  barangay: true,
+                },
+              },
+            },
+          },
+        },
+      },
+      damageReports: {
+        include: {
+          assessment: true,
+          pcicClaim: {
+            select: {
+              id: true,
+              claimNumber: true,
+              headApprovalStatus: true,
+              headApprovedAt: true,
+            },
+          },
+        },
+        orderBy: { incidentDate: "desc" },
+      },
+    },
     orderBy: { plantingDate: "desc" },
   });
 

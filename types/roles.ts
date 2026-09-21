@@ -28,6 +28,6 @@ export const ROLE_CONFIGS: Record<UserRole, RolePermissionConfig> = {
     role: "OMAG_STAFF",
     label: "OMAG Field & Office Staff",
     description: "RSBSA profiling, parcel geotagging, photo inspection, and FIFO inventory distribution",
-    defaultRoute: "/staff/dashboard",
+    defaultRoute: "/staff/beneficiaries",
   },
 };

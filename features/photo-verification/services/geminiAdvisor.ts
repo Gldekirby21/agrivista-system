@@ -88,6 +88,7 @@ Provide your structured advisory assessment in JSON format:
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: AbortSignal.timeout(3000),
           body: JSON.stringify({
             contents: [
               {
@@ -127,9 +128,13 @@ Provide your structured advisory assessment in JSON format:
               console.warn(`Gemini (${modelUsed}) output validation failed:`, parseErr);
             }
           }
+        } else if (response.status === 400 || response.status === 401 || response.status === 403) {
+          // Fast-fail if API key is invalid or rejected; do not retry other models with the same broken key
+          console.warn(`Gemini API key rejected (${response.status}): falling back to rule-based advisory.`);
+          break;
         }
       } catch (networkErr) {
-        console.warn(`Gemini (${modelUsed}) network error:`, networkErr);
+        console.warn(`Gemini (${modelUsed}) network error or timeout:`, networkErr);
       }
     }
   }

@@ -82,7 +82,7 @@ export const PredictionForm: React.FC<PredictionFormProps> = ({
   const fetchCrops = async () => {
     setLoadingCrops(true);
     try {
-      const res = await fetch("/api/rsbsa/crops");
+      const res = await fetch("/api/crops");
       if (res.ok) {
         const data = await res.json();
         const list = Array.isArray(data) ? data : data.data || [];

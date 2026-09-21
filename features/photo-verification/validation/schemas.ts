@@ -1,12 +1,35 @@
 import { z } from "zod";
 
+export const ALLOWED_PHOTO_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+] as const;
+
 export const PhotoUploadSchema = z.object({
   farmerId: z.coerce.number().int().positive("Beneficiary reference is required"),
   farmId: z.coerce.number().int().positive("Farm reference is required"),
   parcelId: z.coerce.number().int().positive("Farm parcel reference is required"),
+  damageReportId: z.coerce.number().int().positive("Crop-loss case reference must be valid").optional().nullable(),
   originalFileName: z.string().trim().min(1, "File name is required"),
-  fileSizeBytes: z.coerce.number().int().nonnegative().default(0),
-  mimeType: z.string().trim().default("image/jpeg"),
+  fileSizeBytes: z.coerce
+    .number()
+    .int()
+    .nonnegative()
+    .max(15 * 1024 * 1024, "File size exceeds municipal limit of 15MB")
+    .default(0),
+  mimeType: z
+    .string()
+    .trim()
+    .refine(
+      (val) =>
+        ALLOWED_PHOTO_MIME_TYPES.includes(val.toLowerCase() as any) ||
+        val.toLowerCase().startsWith("image/"),
+      "Only valid image file formats (JPEG, PNG, WebP, HEIC) are accepted"
+    )
+    .default("image/jpeg"),
   storageKey: z.string().trim().optional(),
   base64Data: z.string().trim().optional(),
   remarks: z.string().trim().max(500).optional().nullable(),
@@ -53,7 +76,10 @@ export const QueryVerificationSchema = z.object({
   search: z.string().trim().optional(),
   barangay: z.string().trim().optional(),
   status: z.string().trim().optional(),
+  caseStatus: z.string().trim().optional(),
+  priorityLevel: z.string().trim().optional(),
   aiAssessment: z.string().trim().optional(),
+  mode: z.enum(["cases", "photos"]).optional().default("cases"),
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().positive().max(100).optional().default(15),
 });

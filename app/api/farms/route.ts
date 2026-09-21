@@ -20,6 +20,18 @@ export async function GET(req: NextRequest) {
   const farms = await prisma.farm.findMany({
     where,
     include: {
+      farmer: {
+        select: {
+          id: true,
+          firstName: true,
+          middleName: true,
+          lastName: true,
+          extensionName: true,
+          rsbsaNumber: true,
+          barangay: true,
+          contactNumber: true,
+        },
+      },
       parcels: {
         where: { status: { not: "Archived" } },
         include: { crops: { where: { status: { not: "Archived" } } } },

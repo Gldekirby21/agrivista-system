@@ -13,9 +13,11 @@ import {
   TreePine,
   ShieldCheck,
   Check,
+  Globe2,
 } from "lucide-react";
 import { POLOMOLOK_BARANGAYS, TENURE_TYPES } from "../types";
 import { cn } from "@/lib/utils/cn";
+import { MapCoordinatePickerModal } from "@/components/maps/MapCoordinatePickerModal";
 
 export interface FarmParcelFormProps {
   farmerId: number;
@@ -34,6 +36,7 @@ export const FarmParcelForm: React.FC<FarmParcelFormProps> = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     farmName: "",
@@ -293,38 +296,61 @@ export const FarmParcelForm: React.FC<FarmParcelFormProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-              Centroid Latitude (°N)
-            </label>
-            <div className="relative flex items-center rounded-xl border border-slate-200 bg-slate-50/60 focus-within:bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
-              <input
-                type="number"
-                step="0.000001"
-                name="latitude"
-                value={formData.latitude}
-                onChange={handleChange}
-                placeholder="6.218900"
-                className="w-full bg-transparent px-3.5 py-2.5 text-xs md:text-sm font-mono text-slate-900 placeholder-slate-400 outline-none"
-              />
+        {/* Centroid Geolocation Bar & Manual Inputs */}
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 text-emerald-600" />
+                Centroid Geolocation Coordinates
+              </span>
+              <p className="text-[11px] text-emerald-800/80">
+                Maaaring i-pin drop sa mapa o i-type nang manual ang decimal coordinates.
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsMapPickerOpen(true)}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold shadow-xs transition-all cursor-pointer shrink-0"
+            >
+              <Globe2 className="h-3.5 w-3.5" />
+              Piliin sa Mapa / Pin Drop
+            </button>
           </div>
 
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
-              Centroid Longitude (°E)
-            </label>
-            <div className="relative flex items-center rounded-xl border border-slate-200 bg-slate-50/60 focus-within:bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
-              <input
-                type="number"
-                step="0.000001"
-                name="longitude"
-                value={formData.longitude}
-                onChange={handleChange}
-                placeholder="125.064500"
-                className="w-full bg-transparent px-3.5 py-2.5 text-xs md:text-sm font-mono text-slate-900 placeholder-slate-400 outline-none"
-              />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-emerald-200/60">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                Centroid Latitude (°N)
+              </label>
+              <div className="relative flex items-center rounded-xl border border-slate-200 bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
+                <input
+                  type="number"
+                  step="0.000001"
+                  name="latitude"
+                  value={formData.latitude}
+                  onChange={handleChange}
+                  placeholder="6.218900"
+                  className="w-full bg-transparent px-3.5 py-2.5 text-xs md:text-sm font-mono text-slate-900 placeholder-slate-400 outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                Centroid Longitude (°E)
+              </label>
+              <div className="relative flex items-center rounded-xl border border-slate-200 bg-white focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all">
+                <input
+                  type="number"
+                  step="0.000001"
+                  name="longitude"
+                  value={formData.longitude}
+                  onChange={handleChange}
+                  placeholder="125.064500"
+                  className="w-full bg-transparent px-3.5 py-2.5 text-xs md:text-sm font-mono text-slate-900 placeholder-slate-400 outline-none"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -355,6 +381,20 @@ export const FarmParcelForm: React.FC<FarmParcelFormProps> = ({
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
+
+      {/* Map Coordinate Picker Modal */}
+      <MapCoordinatePickerModal
+        isOpen={isMapPickerOpen}
+        onClose={() => setIsMapPickerOpen(false)}
+        initialLat={formData.latitude}
+        initialLng={formData.longitude}
+        initialBarangay={formData.barangay}
+        onSelectCoordinates={(lat, lng) => {
+          setFormData((prev) => ({ ...prev, latitude: lat, longitude: lng }));
+        }}
+        title="Piliin ang Centroid ng Farm Parcel"
+        subtitle="I-click o i-drag ang pin sa eksaktong lokasyon ng lote sa Polomolok."
+      />
     </form>
   );
 };

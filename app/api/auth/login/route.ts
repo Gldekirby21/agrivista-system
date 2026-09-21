@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/database/prisma";
-import { signSessionToken, setSessionCookie } from "@/lib/auth/session";
+import { signSessionToken, SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS } from "@/lib/auth/session";
+import { logAuditEvent } from "@/lib/audit/auditLog";
 import { UserSession } from "@/types";
 
 const LoginRequestSchema = z.object({
@@ -12,6 +13,11 @@ const LoginRequestSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const ipAddress =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip") ||
+      null;
+
     const body = await request.json();
 
     // Map username/email if passed in place of identifier
@@ -46,6 +52,20 @@ export async function POST(request: Request) {
 
     // Uniform timing-safe failure response to prevent user enumeration
     if (!user) {
+      await logAuditEvent({
+        userId: null,
+        roleSnapshot: null,
+        action: "LOGIN_FAILED",
+        module: "AUTH",
+        recordId: null,
+        previousValues: null,
+        newValues: {
+          attemptedIdentifier: identifier,
+          reason: "INVALID_CREDENTIALS",
+        },
+        ipAddress,
+      });
+
       return NextResponse.json(
         { error: "Invalid username or password." },
         { status: 401 }
@@ -54,6 +74,20 @@ export async function POST(request: Request) {
 
     const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
     if (!isPasswordValid) {
+      await logAuditEvent({
+        userId: user.id,
+        roleSnapshot: user.role,
+        action: "LOGIN_FAILED",
+        module: "AUTH",
+        recordId: user.id,
+        previousValues: null,
+        newValues: {
+          attemptedIdentifier: identifier,
+          reason: "INVALID_CREDENTIALS",
+        },
+        ipAddress,
+      });
+
       return NextResponse.json(
         { error: "Invalid username or password." },
         { status: 401 }
@@ -72,8 +106,23 @@ export async function POST(request: Request) {
     // Sign JWT session token
     const token = await signSessionToken(sessionUser);
 
+    // Record successful authentication audit event
+    await logAuditEvent({
+      userId: user.id,
+      roleSnapshot: user.role,
+      action: "LOGIN_SUCCESS",
+      module: "AUTH",
+      recordId: user.id,
+      previousValues: null,
+      newValues: {
+        username: user.username,
+        role: user.role,
+      },
+      ipAddress,
+    });
+
     const redirectUrl =
-      user.role === "OMAG_HEAD" ? "/head/dashboard" : "/staff/dashboard";
+      user.role === "OMAG_HEAD" ? "/head/dashboard" : "/staff/beneficiaries";
 
     const response = NextResponse.json(
       {
@@ -85,12 +134,12 @@ export async function POST(request: Request) {
     );
 
     // Set secure HTTP-only cookie on the response
-    response.cookies.set("omag_session_token", token, {
+    response.cookies.set(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 24, // 24 hours
+      maxAge: SESSION_MAX_AGE_SECONDS,
     });
 
     return response;

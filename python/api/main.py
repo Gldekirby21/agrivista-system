@@ -17,11 +17,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from ml.crop_yield_model import crop_yield_model
 from ml.loss_estimator import compute_yield_loss_and_economics
 from ml.synthetic_data import generate_synthetic_historical_data
+from ml.resource_demand_model import resource_demand_model
+from ml.resource_synthetic_data import generate_synthetic_resource_data
 
 app = FastAPI(
     title="OMAG Polomolok ML Prediction Service",
-    description="Machine Learning Service for Crop Yield & Loss Estimation (Objective 3)",
-    version="1.0.0"
+    description="Machine Learning Service for Crop Yield & Loss Estimation (Objective 3) and Resource Demand Modeling (Objective 5)",
+    version="1.1.0"
 )
 
 # CORS Middleware
@@ -62,6 +64,21 @@ class TrainModelRequest(BaseModel):
     customRecords: Optional[List[Dict[str, Any]]] = Field(None)
     useSyntheticFallback: bool = Field(True)
 
+class ResourceDemandPredictionRequest(BaseModel):
+    cropType: str = Field(..., example="Corn")
+    barangay: str = Field("Poblacion", example="Poblacion")
+    season: str = Field("Wet", example="Wet")
+    soilType: str = Field("Volcanic Loam", example="Volcanic Loam")
+    plantedAreaHa: float = Field(1.0, gt=0, example=2.0)
+    calamityOccurrences: int = Field(0, ge=0, example=0)
+    averageYieldTonsHa: Optional[float] = Field(None, gt=0, example=4.5)
+    projectedFarmers: Optional[int] = Field(None, ge=1, example=3)
+
+class TrainResourceModelRequest(BaseModel):
+    modelVersion: Optional[str] = Field("v1.0.0", example="v1.0.0")
+    customRecords: Optional[List[Dict[str, Any]]] = Field(None)
+    useSyntheticFallback: bool = Field(True)
+
 # ------------------------------------------------------------------------------
 # API Endpoints
 # ------------------------------------------------------------------------------
@@ -72,7 +89,7 @@ def root():
     return {
         "status": "online",
         "service": "OMAG Polomolok ML Prediction Service",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "docs": "/docs"
     }
 
@@ -86,11 +103,27 @@ def health_check():
         "modelVersion": crop_yield_model.model_version,
         "algorithm": crop_yield_model.algorithm,
         "isModelLoaded": crop_yield_model.pipeline is not None,
+        "objective3Yield": {
+            "activeModel": crop_yield_model.model_name,
+            "modelVersion": crop_yield_model.model_version,
+            "algorithm": crop_yield_model.algorithm,
+            "isModelLoaded": crop_yield_model.pipeline is not None,
+        },
+        "objective5ResourceDemand": {
+            "seedModel": resource_demand_model.seed_model_name,
+            "fertilizerModel": resource_demand_model.fertilizer_model_name,
+            "modelVersion": resource_demand_model.model_version,
+            "algorithm": resource_demand_model.algorithm,
+            "isModelLoaded": (
+                resource_demand_model.seed_pipeline is not None and
+                resource_demand_model.fertilizer_pipeline is not None
+            ),
+        }
     }
 
 @app.get("/models")
 def list_models():
-    """Returns metadata and metrics of active and registered models."""
+    """Returns metadata and metrics of active and registered models (Objective 3)."""
     if crop_yield_model.pipeline is None:
         crop_yield_model._train_baseline_demo_model()
 
@@ -187,6 +220,73 @@ def predict_crop_loss(req: LossPredictionRequest):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Loss prediction failed: {str(e)}"
+        )
+
+# ------------------------------------------------------------------------------
+# Objective 5 Endpoints: Resource Demand Forecasting
+# ------------------------------------------------------------------------------
+
+@app.get("/models/resource-demand")
+def list_resource_demand_models():
+    """
+    Returns metadata and metrics of active Seed and Fertilizer regression models.
+    """
+    if resource_demand_model.seed_pipeline is None or resource_demand_model.fertilizer_pipeline is None:
+        resource_demand_model._train_baseline_demo_models()
+
+    return {
+        "seedModel": resource_demand_model.seed_metrics,
+        "fertilizerModel": resource_demand_model.fertilizer_metrics,
+        "modelVersion": resource_demand_model.model_version,
+        "algorithm": resource_demand_model.algorithm,
+        "classification": "🟡 PROPOSED SYSTEM DESIGN",
+        "datasetClassification": "⚫ SYNTHETIC — Demonstration/Testing Data",
+        "disclaimer": "These metrics reflect performance on the available demonstration/training dataset and do not establish real-world OMAG forecasting accuracy."
+    }
+
+@app.post("/train/resource-demand")
+def train_resource_demand_models(req: TrainResourceModelRequest):
+    """
+    Trains both Seed and Fertilizer regression models on historical agricultural data.
+    Uses Time-Aware train/test split when chronological year data exists.
+    Evaluates real MAE, RMSE, and R² on test split, and persists model artifacts.
+    """
+    records = req.customRecords
+
+    if not records or len(records) < 10:
+        if req.useSyntheticFallback:
+            records = generate_synthetic_resource_data(count=100, seed=42)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Insufficient historical records for resource demand model training (Minimum 10 valid records required)."
+            )
+
+    try:
+        summary = resource_demand_model.train_and_evaluate(
+            records=records,
+            version=req.modelVersion or "v1.0.0"
+        )
+        return summary
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Resource demand model training failed: {str(e)}"
+        )
+
+@app.post("/predict/resource-demand")
+def predict_resource_demand(req: ResourceDemandPredictionRequest):
+    """
+    Runs dual inference for seed and fertilizer demand given agricultural context.
+    Separates ML predictions from deterministic per-hectare / per-farmer derived values.
+    """
+    try:
+        results = resource_demand_model.predict_resource_demand(req.dict())
+        return results
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Resource demand prediction failed: {str(e)}"
         )
 
 if __name__ == "__main__":

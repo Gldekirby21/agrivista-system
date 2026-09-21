@@ -9,7 +9,7 @@ export default async function HeadLayout({
   children: React.ReactNode;
 }) {
   // Enforce server-side role restriction: only OMAG_HEAD can access /head/* routes
-  // OMAG_STAFF attempting access is safely redirected to /staff/dashboard
+  // OMAG_STAFF attempting access is safely redirected to /staff/beneficiaries
   await assertRoleAccess("OMAG_HEAD");
 
   return <>{children}</>;

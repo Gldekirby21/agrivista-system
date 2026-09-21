@@ -42,6 +42,59 @@ export const Modal: React.FC<ModalProps> = ({
   const modalRef = useRef<HTMLDivElement>(null);
   const [isMaximized, setIsMaximized] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  // Drag position lives in a ref (not state) and is applied straight to the DOM
+  // node, so the window tracks the cursor at full frame rate with zero lag.
+  const positionRef = useRef({ x: 0, y: 0 });
+  const dragStateRef = useRef<{
+    startX: number;
+    startY: number;
+    baseX: number;
+    baseY: number;
+  } | null>(null);
+
+  // Reset drag position to center on open, maximize toggle, or dock restore
+  useEffect(() => {
+    positionRef.current = { x: 0, y: 0 };
+    dragStateRef.current = null;
+    if (modalRef.current) {
+      modalRef.current.style.transform = "";
+    }
+  }, [isOpen, isMaximized, isMinimized]);
+
+  // Mouse drag handler (Gmail compose-style windowing) — no setState per move
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const dragState = dragStateRef.current;
+      if (!dragState || !modalRef.current) return;
+      const nextX = dragState.baseX + (e.clientX - dragState.startX);
+      const nextY = dragState.baseY + (e.clientY - dragState.startY);
+      positionRef.current = { x: nextX, y: nextY };
+      modalRef.current.style.transform = `translate(${nextX}px, ${nextY}px)`;
+    };
+    const handleMouseUp = () => {
+      dragStateRef.current = null;
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, []);
+
+  const handleDragStart = (e: React.MouseEvent) => {
+    // Ignore drags initiated on the window control buttons
+    if ((e.target as HTMLElement).closest("button")) return;
+    if (isMaximized) return;
+    // Prevent text selection while dragging
+    e.preventDefault();
+    dragStateRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      baseX: positionRef.current.x,
+      baseY: positionRef.current.y,
+    };
+  };
 
   // Close on Escape key
   useEffect(() => {
@@ -105,25 +158,30 @@ export const Modal: React.FC<ModalProps> = ({
       role="dialog"
       aria-modal="true"
     >
-      {/* Backdrop */}
+      {/* Backdrop — Gmail compose style: no dimming, no blur; transparent click-catcher only */}
       <div
-        className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs transition-opacity duration-200 animate-in fade-in"
+        className="fixed inset-0"
         onClick={closeOnOutsideClick && !isMaximized ? onClose : undefined}
         aria-hidden="true"
       />
 
-      {/* Modal card — max-h-[90vh] with scrollable body */}
+      {/* Modal card — max-h-[90vh] with scrollable body; draggable via header */}
       <div
         ref={modalRef}
-        className={`relative w-full bg-[var(--card)] rounded-2xl shadow-2xl border border-[var(--card-border)] overflow-hidden z-10 flex flex-col max-h-[90vh] transition-all duration-200 animate-in fade-in zoom-in-95 ${
+        className={`relative w-full bg-[var(--card)] rounded-2xl shadow-2xl border border-[var(--card-border)] overflow-hidden z-10 flex flex-col max-h-[90vh] will-change-transform ${
           isMaximized
             ? "w-[94vw] h-[90vh] max-w-[94vw]"
             : `${sizeClasses[size]}`
         } ${className}`}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-4 py-2.5 md:px-5 md:py-3 bg-[var(--primary-dark)] select-none shrink-0 border-b border-white/10">
-          <div className="min-w-0 flex items-baseline gap-2">
+        {/* Header — drag handle */}
+        <div
+          onMouseDown={handleDragStart}
+          className={`flex items-center justify-between gap-3 px-4 py-2.5 md:px-5 md:py-3 bg-[var(--primary-dark)] select-none shrink-0 border-b border-white/10 ${
+            isMaximized ? "" : "cursor-move"
+          }`}
+        >
+          <div className="min-w-0 flex items-baseline gap-2 pointer-events-none">
             <h3 className="text-xs md:text-sm font-bold text-white tracking-tight truncate">
               {title}
             </h3>

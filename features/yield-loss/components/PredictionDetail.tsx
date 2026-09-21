@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -20,6 +20,11 @@ import {
   Cpu,
   Sparkles,
   Info,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { PredictionRecordDTO } from "../types";
 
@@ -52,361 +57,515 @@ export const PredictionDetail: React.FC<PredictionDetailProps> = ({
   const parcel = prediction.crop?.parcel;
   const crop = prediction.crop;
   const model = prediction.model;
+  const report = prediction.report;
+  const assessment = report?.assessment;
   const snapshot = prediction.inputFeaturesSnapshot || {};
 
-  const reductionPct = prediction.predictedYieldReductionPercent || 0;
+  // Agricultural fields
+  const farmerName = farmer ? `${farmer.firstName} ${farmer.lastName}` : (snapshot.farmerName || "Registered Farmer");
+  const rsbsaId = farmer?.rsbsaNumber || "Not Assigned";
+  const farmName = farm?.farmName || "Primary Holding";
+  const parcelNumber = parcel?.parcelNumber || snapshot.parcelNumber || "N/A";
+  const barangay = farm?.barangay || snapshot.barangay || "Polomolok";
+  const cropName = crop?.cropType || snapshot.cropType || "Crop";
+  const cropType = crop?.cropType || snapshot.cropType || "Crop";
+  const cropVariety = crop?.variety || snapshot.variety || "Standard Hybrid";
+  const plantedArea = crop?.plantedAreaHa || snapshot.plantedAreaHa || 1.0;
+  const cropSeason = crop?.season || snapshot.season || "Wet";
+  const cropYear = crop?.year || snapshot.year || 2026;
+
+  // Incident & Damage fields
+  const incidentDate = report?.incidentDate 
+    ? new Date(report.incidentDate).toLocaleDateString() 
+    : (snapshot.incidentDate ? new Date(snapshot.incidentDate).toLocaleDateString() : "No Incident Recorded");
+  const calamityCause = report?.calamityType || snapshot.damageCause || snapshot.calamityType || "General Calamity / Unspecified";
+  
+  const reportedDamagePct = report?.reportedDamagePercent !== undefined 
+    ? report.reportedDamagePercent 
+    : (snapshot.reportedDamagePercent !== undefined ? snapshot.reportedDamagePercent : null);
+
+  const assessedDamagePct = assessment?.assessedDamagePercent !== undefined
+    ? assessment.assessedDamagePercent
+    : (snapshot.calamityDamagePercent !== undefined ? snapshot.calamityDamagePercent : 0);
+
+  const assessedAreaHa = assessment?.assessedAreaHa !== undefined
+    ? assessment.assessedAreaHa
+    : (report?.reportedAffectedAreaHa !== undefined ? report.reportedAffectedAreaHa : plantedArea);
+
+  const cropStage = assessment?.cropStage || "Vegetative / Standing";
+
+  // ML & Mathematical Derived metrics
   const normalTons = prediction.projectedNormalYieldTons || 0;
   const remainingTons = prediction.predictedRemainingYieldTons || 0;
   const reductionTons = Math.max(0, normalTons - remainingTons);
-  const areaHa = crop?.plantedAreaHa || snapshot.plantedAreaHa || 1;
+  const reductionPct = prediction.predictedYieldReductionPercent || 0;
+  const baselineYieldTonsHa = plantedArea > 0 ? normalTons / plantedArea : 0;
+  const estimatedCropLossKg = reductionTons * 1000;
+  const farmgatePrice = snapshot.cropUnitPricePhpKg || snapshot.unitPricePhpKg || null;
 
-  const normalTonsHa = areaHa > 0 ? normalTons / areaHa : 0;
-  const remainingTonsHa = areaHa > 0 ? remainingTons / areaHa : 0;
+  // Toggle state to hide/show technical background details (Section A, Section B, Section D)
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
-      {/* 1. Header & Navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Navigation Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
           <Link
             href={backPath}
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-emerald-700 transition-colors mb-2"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>Back to Yield & Loss Predictions</span>
+            <span>Back to Yield &amp; Loss Prediction</span>
           </Link>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-            <span>Prediction Dossier</span>
+            <span>View Prediction Result</span>
             <span className="text-xs font-mono font-normal px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
               ID: {prediction.id.slice(0, 8)}...
             </span>
           </h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Generated on {new Date(prediction.predictionTimestamp).toLocaleString()}
+            Prediction Date/Time: <span className="font-semibold text-slate-800 font-mono">{new Date(prediction.predictionTimestamp).toLocaleString()}</span>
           </p>
         </div>
 
+        {/* Workflow Actions */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="px-3 py-1 rounded-lg bg-amber-100/80 border border-amber-300 text-amber-900 text-xs font-bold flex items-center gap-1.5">
-            <span>🟡 PROPOSED SYSTEM DESIGN</span>
-          </span>
-          <span className="px-3 py-1 rounded-lg bg-emerald-100/80 border border-emerald-300 text-emerald-900 text-xs font-bold flex items-center gap-1.5">
-            <Cpu className="h-3.5 w-3.5 text-emerald-700" />
-            <span>{model?.algorithm || "RandomForestRegressor"}</span>
-          </span>
-        </div>
-      </div>
-
-      {/* 2. PCIC Boundary & Statutory Non-Approval Notice */}
-      <div className="rounded-2xl border border-amber-300/80 bg-amber-50 p-4 shadow-2xs">
-        <div className="flex items-start gap-3.5">
-          <ShieldAlert className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
-          <div className="text-xs text-amber-950 space-y-1">
-            <p className="font-bold text-sm text-amber-950">
-              Official PCIC Boundary & Advisory Disclaimer
-            </p>
-            <p className="leading-relaxed text-amber-900">
-              This yield reduction and economic loss dossier is an <strong>analytical estimate</strong> generated by the OMAG Polomolok Machine Learning module for localized municipal risk assessment and planning. This document <strong>DOES NOT</strong> constitute official Philippine Crop Insurance Corporation (PCIC) claim approval, formal adjusters’ assessment, or guarantee of indemnity payout.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Core Prediction Metrics Display */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Normal Yield */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider">Projected Normal Yield</span>
-            <TrendingUp className="h-5 w-5 text-emerald-600" />
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black text-slate-900 font-mono">
-              {normalTons.toFixed(2)}
-            </span>{" "}
-            <span className="text-xs font-semibold text-slate-500">total tons</span>
-          </div>
-          <p className="text-xs text-slate-500 mt-1 font-mono">
-            {normalTonsHa.toFixed(2)} tons / ha baseline
-          </p>
-        </div>
-
-        {/* Remaining Harvest */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider">Predicted Remaining</span>
-            <Leaf className="h-5 w-5 text-teal-600" />
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black text-teal-900 font-mono">
-              {remainingTons.toFixed(2)}
-            </span>{" "}
-            <span className="text-xs font-semibold text-slate-500">total tons</span>
-          </div>
-          <p className="text-xs text-slate-500 mt-1 font-mono">
-            {remainingTonsHa.toFixed(2)} tons / ha estimated
-          </p>
-        </div>
-
-        {/* Yield Reduction */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider">Yield Reduction</span>
-            <TrendingDown className="h-5 w-5 text-amber-600" />
-          </div>
-          <div className="mt-3">
-            <span className="text-2xl font-black text-amber-700 font-mono">
-              {reductionPct > 0 ? `-${reductionPct.toFixed(1)}%` : "0.0%"}
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-1 font-mono">
-            -{reductionTons.toFixed(2)} tons difference
-          </p>
-        </div>
-
-        {/* Economic Crop Loss */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
-          <div className="flex items-center justify-between text-slate-500">
-            <span className="text-xs font-bold uppercase tracking-wider">Est. Economic Loss</span>
-            <DollarSign className="h-5 w-5 text-red-600" />
-          </div>
-          <div className="mt-3">
-            {prediction.estimatedEconomicLossPhp !== null ? (
-              <span className="text-2xl font-black text-red-700 font-mono">
-                ₱{prediction.estimatedEconomicLossPhp.toLocaleString("en-US", { maximumFractionDigits: 2 })}
-              </span>
+          {/* Toggle button to hide/show technical details */}
+          <button
+            type="button"
+            onClick={() => setShowTechnicalDetails(!showTechnicalDetails)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs"
+            title={showTechnicalDetails ? "Hide technical parameters & model inputs" : "Show technical parameters & model inputs"}
+          >
+            {showTechnicalDetails ? (
+              <>
+                <EyeOff className="h-4 w-4 text-slate-500" />
+                <span>Hide Technical Details</span>
+              </>
             ) : (
-              <span className="text-sm font-semibold text-slate-400 italic">
-                Price Data Unavailable
-              </span>
+              <>
+                <Eye className="h-4 w-4 text-emerald-700" />
+                <span>Show Technical Details</span>
+              </>
             )}
-          </div>
-          <p className="text-xs text-slate-500 mt-1">
-            {snapshot.unitPricePhpKg
-              ? `@ ₱${snapshot.unitPricePhpKg}/kg unit price`
-              : "No official commodity price set"}
+          </button>
+
+          {report && (
+            <Link
+              href={`/staff/photo-verification/${report.id}`}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all shadow-2xs"
+            >
+              <FileCheck2 className="h-4 w-4 text-slate-500" />
+              <span>View Crop-Loss Case</span>
+            </Link>
+          )}
+
+          {userRole === "OMAG_STAFF" && (
+            <Link
+              href="/staff/pcic/ranking"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-sm"
+              title="Proceed to Priority Ranking workspace"
+            >
+              <span>Proceed to Priority Ranking</span>
+              <ArrowLeft className="h-4 w-4 rotate-180" />
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Advisory Workflow Disclaimer */}
+      <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-blue-900 flex items-start gap-2.5">
+        <Info className="h-4 w-4 text-blue-700 mt-0.5 shrink-0" />
+        <div className="space-y-0.5">
+          <span className="font-bold">Objective #3 Advisory Crop Yield/Loss Information:</span>
+          <p className="text-blue-800">
+            This machine learning prediction provides crop yield and loss estimation to support OMAG monitoring and decision-making. It does NOT automatically determine PCIC priority or claim compensation. Priority Ranking is evaluated independently in the PCIC Priority Ranking workspace based on approved scoring rules.
           </p>
         </div>
       </div>
 
-      {/* 4. Two-Column Detailed Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column: Beneficiary & Crop Details */}
-        <div className="space-y-6">
-          {/* Beneficiary Card */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <MapPin className="h-4 w-4 text-emerald-600" />
-              Beneficiary & Parcel Profile
-            </h3>
+      {/* ========================================================================= */}
+      {/* SECTION C — PREDICTION RESULT (PROMINENT KPI SUMMARY)                     */}
+      {/* ========================================================================= */}
+      <div>
+        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-3 flex items-center gap-2">
+          <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+          <span>SECTION C — PREDICTION RESULT</span>
+        </h2>
 
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <span className="text-slate-500 block">Farmer Name</span>
-                <span className="font-bold text-slate-900 text-sm">
-                  {farmer ? `${farmer.firstName} ${farmer.lastName}` : "Unknown"}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-500 block">RSBSA System ID</span>
-                <span className="font-mono font-bold text-slate-800">
-                  {farmer?.rsbsaNumber || "Not Assigned"}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-500 block">Barangay Jurisdiction</span>
-                <span className="font-semibold text-slate-800">
-                  {farm?.barangay || "Polomolok"}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-500 block">Parcel Reference</span>
-                <span className="font-mono font-semibold text-slate-800">
-                  {parcel?.parcelNumber || "N/A"}
-                </span>
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* 1. Baseline / Projected Yield */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-xs font-bold uppercase tracking-wider">Projected Yield</span>
+              <TrendingUp className="h-5 w-5 text-emerald-600" />
             </div>
+            <div className="mt-3">
+              <span className="text-2xl font-black text-slate-900 font-mono">
+                {baselineYieldTonsHa.toFixed(2)}
+              </span>{" "}
+              <span className="text-xs font-semibold text-slate-500">tons/ha</span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              ML-predicted baseline productivity
+            </p>
           </div>
 
-          {/* Crop Planting & Agronomic Profile */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <Leaf className="h-4 w-4 text-emerald-600" />
-              Crop & Agronomic Details
-            </h3>
-
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <span className="text-slate-500 block">Crop Type</span>
-                <span className="font-bold text-slate-900">
-                  {crop?.cropType || snapshot.cropType || "Unknown"}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-500 block">Variety</span>
-                <span className="font-semibold text-slate-800">
-                  {crop?.variety || "Standard Hybrid"}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-500 block">Season / Year</span>
-                <span className="font-semibold text-slate-800">
-                  {crop?.season || "Wet"} {crop?.year || 2026}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-500 block">Planted Area</span>
-                <span className="font-mono font-bold text-slate-800">
-                  {areaHa.toFixed(2)} hectares
-                </span>
-              </div>
+          {/* 2. Expected / Normal Production */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-xs font-bold uppercase tracking-wider">Expected Production</span>
+              <Leaf className="h-5 w-5 text-teal-600" />
             </div>
+            <div className="mt-3">
+              <span className="text-2xl font-black text-teal-900 font-mono">
+                {normalTons.toFixed(2)}
+              </span>{" "}
+              <span className="text-xs font-semibold text-slate-500">tons</span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1 font-mono">
+              {baselineYieldTonsHa.toFixed(2)} t/ha × {plantedArea.toFixed(2)} ha
+            </p>
           </div>
 
-          {/* Damage & Environmental Stressors */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <CloudRain className="h-4 w-4 text-blue-600" />
-              Environmental Stressors & Damage Inputs
-            </h3>
-
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div>
-                <span className="text-slate-500 block">Reported Damage %</span>
-                <span className="font-bold font-mono text-amber-800">
-                  {snapshot.damagePercentage !== undefined ? `${snapshot.damagePercentage}%` : "None"}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-500 block">Damage Cause</span>
-                <span className="font-semibold text-slate-800 capitalize">
-                  {snapshot.damageCause ? snapshot.damageCause.replace("_", " ") : "None reported"}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-500 block">Rainfall</span>
-                <span className="font-mono text-slate-800">
-                  {snapshot.rainfallMm !== undefined ? `${snapshot.rainfallMm} mm` : "Normal"}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-500 block">Average Temperature</span>
-                <span className="font-mono text-slate-800">
-                  {snapshot.temperatureC !== undefined ? `${snapshot.temperatureC} °C` : "28.0 °C"}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-500 block">Soil Type</span>
-                <span className="font-semibold text-slate-800">
-                  {snapshot.soilType || "Clay Loam"}
-                </span>
-              </div>
-
-              <div>
-                <span className="text-slate-500 block">Fertilizer Application</span>
-                <span className="font-mono text-slate-800">
-                  {snapshot.fertilizerKgHa !== undefined ? `${snapshot.fertilizerKgHa} kg/ha` : "120 kg/ha"}
-                </span>
-              </div>
+          {/* 3. Predicted Remaining Production */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-xs font-bold uppercase tracking-wider">Predicted Remaining Production</span>
+              <Layers className="h-5 w-5 text-blue-600" />
             </div>
+            <div className="mt-3">
+              <span className="text-2xl font-black text-blue-900 font-mono">
+                {remainingTons.toFixed(2)}
+              </span>{" "}
+              <span className="text-xs font-semibold text-slate-500">tons</span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1 font-mono">
+              Expected ({normalTons.toFixed(2)}t) - Loss ({reductionTons.toFixed(2)}t)
+            </p>
+          </div>
+
+          {/* 4. Predicted Yield Reduction */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-xs font-bold uppercase tracking-wider">Predicted Yield Reduction</span>
+              <TrendingDown className="h-5 w-5 text-amber-600" />
+            </div>
+            <div className="mt-3">
+              <span className="text-2xl font-black text-amber-700 font-mono">
+                {reductionPct > 0 ? `-${reductionPct.toFixed(1)}%` : "0.0%"}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1 font-mono">
+              -{reductionTons.toFixed(2)} tons difference
+            </p>
+          </div>
+
+          {/* 5. Estimated Crop Loss */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-xs font-bold uppercase tracking-wider">Estimated Crop Loss</span>
+              <TrendingDown className="h-5 w-5 text-red-600" />
+            </div>
+            <div className="mt-3">
+              <span className="text-2xl font-black text-red-800 font-mono">
+                {reductionTons.toFixed(2)}
+              </span>{" "}
+              <span className="text-xs font-semibold text-slate-500">tons ({estimatedCropLossKg.toLocaleString()} kg)</span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1 font-mono">
+              {assessedDamagePct}% assessed field damage
+            </p>
+          </div>
+
+          {/* 6. Estimated Economic Crop Loss */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+            <div className="flex items-center justify-between text-slate-500">
+              <span className="text-xs font-bold uppercase tracking-wider">Estimated Economic Loss</span>
+              <DollarSign className="h-5 w-5 text-red-600" />
+            </div>
+            <div className="mt-3">
+              {prediction.estimatedEconomicLossPhp !== null ? (
+                <span className="text-2xl font-black text-red-700 font-mono">
+                  ₱{prediction.estimatedEconomicLossPhp.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              ) : (
+                <span className="text-sm font-semibold text-slate-400 italic">
+                  Price Data Unavailable
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              {farmgatePrice
+                ? `Calculation: ${estimatedCropLossKg.toLocaleString()} kg × ₱${Number(farmgatePrice).toFixed(2)}/kg`
+                : "No official farmgate price supplied"}
+            </p>
           </div>
         </div>
+      </div>
 
-        {/* Right Column: Model Registry Snapshot & Audit Trail */}
-        <div className="space-y-6">
-          {/* ML Model Performance & Registry */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <Brain className="h-4 w-4 text-purple-600" />
-              Model Registry & Evaluation Metrics
-            </h3>
-
-            <div className="space-y-3 text-xs">
-              <div className="flex justify-between items-center py-1 border-b border-slate-100">
-                <span className="text-slate-500">Model Name & Algorithm</span>
-                <span className="font-semibold text-slate-800">
-                  {model?.modelName || "RandomForest Crop Yield Model"}
+      {/* Collapsible Technical Details: Section A, Section B, Section D */}
+      {showTechnicalDetails ? (
+        <div className="space-y-6 animate-in fade-in-50 duration-300">
+          {/* Two-Column Section: Section A and Section B */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* ========================================================================= */}
+            {/* SECTION A — CROP-LOSS INFORMATION                                         */}
+            {/* ========================================================================= */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <MapPin className="h-4 w-4 text-emerald-600" />
+                  SECTION A — CROP-LOSS INFORMATION
+                </h3>
+                <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                  Brgy. {barangay}
                 </span>
               </div>
 
-              <div className="flex justify-between items-center py-1 border-b border-slate-100">
-                <span className="text-slate-500">Model Version</span>
-                <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                  {model?.modelVersion || "v1.0.0"}
+              <div className="grid grid-cols-2 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-500 block">Farmer</span>
+                  <span className="font-bold text-slate-900 text-sm">{farmerName}</span>
+                  <span className="text-[10px] text-slate-400 font-mono block">RSBSA: {rsbsaId}</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">Barangay</span>
+                  <span className="font-bold text-slate-900 text-sm">{barangay}</span>
+                  <span className="text-[10px] text-slate-400 block">Municipal Jurisdiction</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">Farm</span>
+                  <span className="font-semibold text-slate-800">{farmName}</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">Farm Parcel</span>
+                  <span className="font-mono font-semibold text-slate-800">{parcelNumber}</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">Crop</span>
+                  <span className="font-bold text-slate-900">{cropName}</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">Crop Type</span>
+                  <span className="font-semibold text-slate-800">{cropType} ({cropVariety})</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">Planted Area</span>
+                  <span className="font-mono font-bold text-slate-800">{Number(plantedArea).toFixed(2)} ha</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">Incident Date</span>
+                  <span className="font-semibold text-slate-800">{incidentDate}</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">Calamity / Cause</span>
+                  <span className="font-semibold text-slate-800 capitalize">{calamityCause}</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-500 block">Crop Stage</span>
+                  <span className="font-semibold text-slate-800">{cropStage}</span>
+                </div>
+
+                {/* Crucial: Distinction between Reported Damage vs Assessed Damage */}
+                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-2.5">
+                  <span className="text-amber-800 font-bold block text-[11px] uppercase tracking-wider">
+                    Reported Damage %
+                  </span>
+                  <span className="text-lg font-black font-mono text-amber-950 block">
+                    {reportedDamagePct !== null ? `${reportedDamagePct}%` : "Not reported"}
+                  </span>
+                  <span className="text-[10px] text-amber-700 block">Farmer / Reporter Declaration</span>
+                </div>
+
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5">
+                  <span className="text-emerald-800 font-bold block text-[11px] uppercase tracking-wider">
+                    Assessed Damage %
+                  </span>
+                  <span className="text-lg font-black font-mono text-emerald-950 block">
+                    {assessedDamagePct}%
+                  </span>
+                  <span className="text-[10px] text-emerald-700 block">
+                    OMAG Staff Field Assessment ({Number(assessedAreaHa).toFixed(2)} ha)
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* ========================================================================= */}
+            {/* SECTION B — PREDICTION INPUTS (ACTUAL MODEL INPUTS ONLY)                   */}
+            {/* ========================================================================= */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Cpu className="h-4 w-4 text-purple-600" />
+                  SECTION B — PREDICTION INPUTS
+                </h3>
+                <span className="text-[10px] font-bold text-purple-800 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded">
+                  Model Features Used
                 </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 pt-2 text-center">
-                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5">
-                  <span className="text-[10px] uppercase font-bold text-slate-500 block">R² Score</span>
-                  <span className="font-mono font-bold text-slate-900 text-sm">
-                    {model?.r2Score !== undefined ? model.r2Score.toFixed(4) : "—"}
-                  </span>
-                </div>
-
-                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5">
-                  <span className="text-[10px] uppercase font-bold text-slate-500 block">MAE (t/ha)</span>
-                  <span className="font-mono font-bold text-slate-900 text-sm">
-                    {model?.mae !== undefined ? model.mae.toFixed(3) : "—"}
-                  </span>
-                </div>
-
-                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5">
-                  <span className="text-[10px] uppercase font-bold text-slate-500 block">RMSE (t/ha)</span>
-                  <span className="font-mono font-bold text-slate-900 text-sm">
-                    {model?.rmse !== undefined ? model.rmse.toFixed(3) : "—"}
-                  </span>
-                </div>
-              </div>
-
-              <p className="text-[11px] text-slate-500 italic mt-2">
-                * Metrics evaluated on distinct 20% test partition of stratified Polomolok agricultural dataset.
+              <p className="text-[11px] text-slate-500">
+                Displays only the actual model features utilized by the active RandomForestRegressor pipeline:
               </p>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70">
+                  <span className="text-slate-500 block text-[11px] font-medium">1. Crop Type</span>
+                  <span className="font-bold text-slate-900 font-mono mt-0.5 block">{cropType}</span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70">
+                  <span className="text-slate-500 block text-[11px] font-medium">2. Barangay</span>
+                  <span className="font-bold text-slate-900 font-mono mt-0.5 block">{barangay}</span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70">
+                  <span className="text-slate-500 block text-[11px] font-medium">3. Season</span>
+                  <span className="font-bold text-slate-900 font-mono mt-0.5 block">{cropSeason}</span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70">
+                  <span className="text-slate-500 block text-[11px] font-medium">4. Soil Type</span>
+                  <span className="font-bold text-slate-900 font-mono mt-0.5 block">{snapshot.soilType || "Volcanic Loam"}</span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70">
+                  <span className="text-slate-500 block text-[11px] font-medium">5. Planted Area (ha)</span>
+                  <span className="font-bold text-slate-900 font-mono mt-0.5 block">{Number(plantedArea).toFixed(2)} ha</span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70">
+                  <span className="text-slate-500 block text-[11px] font-medium">6. Historical Yield (Baseline)</span>
+                  <span className="font-bold text-slate-900 font-mono mt-0.5 block">
+                    {snapshot.baselineYieldTonsHa ? `${Number(snapshot.baselineYieldTonsHa).toFixed(2)} t/ha` : `${baselineYieldTonsHa.toFixed(2)} t/ha`}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/70 col-span-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-500 text-[11px] font-medium">7. Calamity Occurrences (Historical Shock Feature)</span>
+                    <span className="font-bold font-mono text-slate-900">{snapshot.calamityOccurrences ?? 0}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    * Note: Historical calamity count is separate from current assessed damage ({assessedDamagePct}%).
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Audit Trail History */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-              <History className="h-4 w-4 text-slate-600" />
-              Municipal Audit History
-            </h3>
+          {/* ========================================================================= */}
+          {/* SECTION D — MODEL INFORMATION                                             */}
+          {/* ========================================================================= */}
+          <div className="grid grid-cols-1 gap-6">
+            {/* Card D.1: ML Model Information */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <Brain className="h-4 w-4 text-purple-600" />
+                  SECTION D — MODEL INFORMATION
+                </h3>
+                <span className="text-[11px] font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  {model?.modelVersion || snapshot.modelVersion || "v1.0.0"}
+                </span>
+              </div>
 
-            {prediction.auditLogs && prediction.auditLogs.length > 0 ? (
-              <div className="space-y-3">
-                {prediction.auditLogs.map((log) => (
-                  <div key={log.id} className="p-3 bg-slate-50 border border-slate-200/70 rounded-xl text-xs space-y-1">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-800">{log.action}</span>
-                      <span className="text-[10px] text-slate-400">
-                        {new Date(log.timestamp || log.createdAt || Date.now()).toLocaleString()}
+              <div className="space-y-3 text-xs">
+                <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                  <span className="text-slate-500">ML Algorithm</span>
+                  <span className="font-bold text-slate-900">
+                    Random Forest Regressor
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                  <span className="text-slate-500">Model Version</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {model?.modelVersion || snapshot.modelVersion || "v1.0.0"}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center py-1 border-b border-slate-100">
+                  <span className="text-slate-500">Prediction Date/Time</span>
+                  <span className="font-mono font-semibold text-slate-900">
+                    {new Date(prediction.predictionTimestamp).toLocaleString()}
+                  </span>
+                </div>
+
+                {/* Model Evaluation Metrics */}
+                <div className="pt-2">
+                  <span className="text-[11px] font-bold text-slate-600 block mb-2">
+                    Offline Model Evaluation Metrics (Not Individual Prediction Confidence):
+                  </span>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 block">R² Score</span>
+                      <span className="font-mono font-bold text-slate-900 text-sm">
+                        {model?.r2Score !== undefined ? model.r2Score.toFixed(4) : "—"}
                       </span>
                     </div>
-                    <p className="text-slate-600">{log.details || "Prediction generated and recorded."}</p>
-                    <div className="text-[11px] text-emerald-700 font-medium">
-                      By: {log.user?.fullName || log.user?.name || log.user?.email || "OMAG Staff"} ({log.user?.role || "OMAG_STAFF"})
+
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 block">MAE (t/ha)</span>
+                      <span className="font-mono font-bold text-slate-900 text-sm">
+                        {model?.mae !== undefined ? model.mae.toFixed(3) : "—"}
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 block">RMSE (t/ha)</span>
+                      <span className="font-mono font-bold text-slate-900 text-sm">
+                        {model?.rmse !== undefined ? model.rmse.toFixed(3) : "—"}
+                      </span>
                     </div>
                   </div>
-                ))}
+                  <p className="text-[10px] text-slate-400 mt-1.5 italic">
+                    * Note: MAE, RMSE, and R² reflect aggregate offline holdout evaluation, not confidence of an individual field prediction.
+                  </p>
+                </div>
               </div>
-            ) : (
-              <div className="p-4 bg-slate-50 rounded-xl text-xs text-slate-500 text-center">
-                Prediction logged with immutable timestamp on {new Date(prediction.predictionTimestamp).toLocaleDateString()}.
-              </div>
-            )}
+            </div>
           </div>
         </div>
-      </div>
+      ) : (
+        /* Collapsed State Notice with Quick Reveal Button */
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 p-4 text-center">
+          <div className="max-w-md mx-auto space-y-2">
+            <p className="text-xs text-slate-500">
+              Technical crop-loss inputs, ML features (Sections A &amp; B), and model parameters (Section D) are hidden for a cleaner view.
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowTechnicalDetails(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition-colors"
+              >
+                <Eye className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Show Technical Details</span>
+              </button>
+              <Link
+                href={`${userRole === "OMAG_HEAD" ? "/head" : "/staff"}/audit?module=CROP_PREDICTION&recordId=${prediction.id}`}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-slate-900 text-white hover:bg-slate-800 shadow-2xs transition-colors"
+              >
+                <span>Activity / Audit Logs</span>
+                <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

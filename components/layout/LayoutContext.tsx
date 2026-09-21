@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 
 export interface HeaderInfo {
   title: string;
@@ -26,6 +26,22 @@ export const LayoutProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     title: "OMAG Polomolok",
     subtitle: "Agricultural Resource & Production Management",
   });
+
+  // Responsive mobile awareness: auto-collapse sidebar on smaller screens (< 768px)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const handleResize = () => {
+        if (window.innerWidth < 768) {
+          setIsSidebarCollapsed(true);
+        }
+      };
+      if (window.innerWidth < 768) {
+        setIsSidebarCollapsed(true);
+      }
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
+    }
+  }, []);
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed((prev) => !prev);

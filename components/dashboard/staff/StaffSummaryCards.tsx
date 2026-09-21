@@ -26,20 +26,20 @@ export const StaffSummaryCards: React.FC = async () => {
     {
       title: "Beneficiary Intake Queue",
       count: farmerCount,
-      label: farmerCount > 0 ? "Baseline records" : "No enrollees in queue",
+      label: farmerCount > 0 ? "Registered farmers" : "No enrollees in queue",
       icon: Users,
       badge: "Objective 1",
       variant: "default" as const,
-      subtext: "Synthetic Demonstration Data — Baseline",
+      subtext: "Live database count",
     },
     {
       title: "Farm Parcels Mapped",
       count: parcelCount,
-      label: parcelCount > 0 ? "Baseline parcels" : "No plots mapped",
+      label: parcelCount > 0 ? "Mapped cadastral plots" : "No plots mapped",
       icon: MapPin,
       badge: "Objective 1 & 2",
       variant: "info" as const,
-      subtext: "Synthetic Demonstration Data — Baseline",
+      subtext: "Live database count",
     },
     {
       title: "Field Photos Uploaded",
@@ -48,7 +48,7 @@ export const StaffSummaryCards: React.FC = async () => {
       icon: Camera,
       badge: "Objective 2",
       variant: "warning" as const,
-      subtext: "Pending Phase Activation",
+      subtext: "Live database count",
     },
     {
       title: "Active Inventory Batches",
@@ -57,7 +57,7 @@ export const StaffSummaryCards: React.FC = async () => {
       icon: PackageCheck,
       badge: "Objective 4",
       variant: "neutral" as const,
-      subtext: "Pending Phase Activation",
+      subtext: "Live database count",
     },
   ];
 
@@ -67,8 +67,8 @@ export const StaffSummaryCards: React.FC = async () => {
         <h2 id="staff-kpi-heading" className="text-sm font-bold uppercase tracking-wider text-slate-700">
           Operational Intake & Queue Summary
         </h2>
-        <span className="text-[11px] text-amber-700 font-medium">
-          Synthetic Demonstration Data — Not Actual OMAG Records
+        <span className="text-[11px] text-slate-500 font-medium">
+          Live database totals — no fabricated data
         </span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

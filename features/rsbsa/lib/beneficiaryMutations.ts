@@ -22,6 +22,17 @@ import {
   DocumentUpdateSchema,
   DocumentUpdateInput,
 } from "./validation";
+import { generateRsbsaNumber } from "./rsbsaUtils";
+
+async function generateUniqueRsbsaNumber(barangay: string = "Poblacion"): Promise<string> {
+  let candidate = generateRsbsaNumber(barangay);
+  let existing = await prisma.farmer.findUnique({ where: { rsbsaNumber: candidate } });
+  while (existing) {
+    candidate = generateRsbsaNumber(barangay);
+    existing = await prisma.farmer.findUnique({ where: { rsbsaNumber: candidate } });
+  }
+  return candidate;
+}
 
 // -----------------------------------------------------------------------------
 // 1. BENEFICIARY MUTATIONS
@@ -34,12 +45,15 @@ export async function createBeneficiary(
 ) {
   const validated = BeneficiaryCreateSchema.parse(input);
 
-  if (validated.rsbsaNumber) {
+  let rsbsaNum = validated.rsbsaNumber?.trim() || null;
+  if (!rsbsaNum) {
+    rsbsaNum = await generateUniqueRsbsaNumber(validated.barangay);
+  } else {
     const existing = await prisma.farmer.findUnique({
-      where: { rsbsaNumber: validated.rsbsaNumber },
+      where: { rsbsaNumber: rsbsaNum },
     });
     if (existing) {
-      throw new Error(`RSBSA Identifier '${validated.rsbsaNumber}' is already assigned.`);
+      throw new Error(`RSBSA Identifier '${rsbsaNum}' is already assigned.`);
     }
   }
 
@@ -49,7 +63,7 @@ export async function createBeneficiary(
       middleName: validated.middleName || null,
       lastName: validated.lastName,
       extensionName: validated.extensionName || null,
-      rsbsaNumber: validated.rsbsaNumber || null,
+      rsbsaNumber: rsbsaNum,
       farmerCode: validated.farmerCode || null,
       sex: validated.sex,
       dateOfBirth: validated.dateOfBirth,
@@ -97,18 +111,24 @@ export async function updateBeneficiary(
 
   const validated = BeneficiaryUpdateSchema.parse(input);
 
-  if (validated.rsbsaNumber && validated.rsbsaNumber !== existing.rsbsaNumber) {
+  let rsbsaNum = validated.rsbsaNumber?.trim() || null;
+  if (!rsbsaNum && !existing.rsbsaNumber) {
+    rsbsaNum = await generateUniqueRsbsaNumber(validated.barangay || existing.barangay);
+  } else if (rsbsaNum && rsbsaNum !== existing.rsbsaNumber) {
     const duplicate = await prisma.farmer.findUnique({
-      where: { rsbsaNumber: validated.rsbsaNumber },
+      where: { rsbsaNumber: rsbsaNum },
     });
     if (duplicate && duplicate.id !== id) {
-      throw new Error(`RSBSA Identifier '${validated.rsbsaNumber}' is already registered.`);
+      throw new Error(`RSBSA Identifier '${rsbsaNum}' is already registered.`);
     }
   }
 
   const updated = await prisma.farmer.update({
     where: { id },
-    data: validated,
+    data: {
+      ...validated,
+      ...(rsbsaNum ? { rsbsaNumber: rsbsaNum } : {}),
+    },
   });
 
   await logAuditEvent({

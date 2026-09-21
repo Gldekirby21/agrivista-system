@@ -110,4 +110,118 @@ export interface PhotoVerificationListItem {
   systemReviewStatus: string | null;
   createdAt: Date;
   updatedAt: Date;
+  damageReportId?: number | null;
+  claimId?: string | null;
+  claimNumber?: string | null;
+  reportNumber?: string | null;
+  claimStatus?: string | null;
+  priorityLevel?: string | null;
+  cropType?: string | null;
+  reportedDamagePercent?: number | null;
+}
+
+export interface CasePhotoSummaryItem {
+  id: string;
+  originalFileName: string;
+  storageKey: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  photoTimestamp: string | null;
+  photoLatitude: number | null;
+  photoLongitude: number | null;
+  photoAltitude: number | null;
+  deviceMake: string | null;
+  deviceModel: string | null;
+  registeredLatitude: number | null;
+  registeredLongitude: number | null;
+  calculatedDistanceMeters: number | null;
+  thresholdMeters: number;
+  verificationStatus: string;
+  gpsStatus: string;
+  timestampStatus: string;
+  failureReasonCode: string | null;
+  verificationNotes: string | null;
+  aiAssessment: string | null;
+  aiRecommendation: string | null;
+  aiReviewRequired: boolean;
+  aiExplanation: string | null;
+  aiAuditNote: string | null;
+  aiConfidence: string | null;
+  aiConflict: boolean;
+  aiModelUsed: string | null;
+  aiAssessedAt: string | null;
+  systemReviewStatus: string | null;
+  systemReviewNotes: string | null;
+  createdAt: string;
+  verifiedByName: string | null;
+}
+
+export interface CropLossCaseVerificationListItem {
+  id: number | string; // DamageReport ID or PhotoVerification UUID
+  reportNumber: string;
+  claimId: string | null;
+  claimNumber: string | null;
+  farmerId: number;
+  farmerName: string;
+  farmerRsbsa: string | null;
+  farmerCode: string | null;
+  farmId: number;
+  farmName: string | null;
+  barangay: string;
+  parcelId: number;
+  parcelNumber: string;
+  parcelAreaHa: number;
+  parcelLatitude: number | null;
+  parcelLongitude: number | null;
+  cropId: number;
+  cropType: string;
+  variety: string | null;
+  plantedAreaHa: number;
+  incidentDate: string;
+  calamityType: string;
+  reportedDamagePercent: number;
+  assessedDamagePercent: number | null;
+  reportedAffectedAreaHa: number;
+  narrativeDescription: string | null;
+  caseStatus: string;
+  dateReported: string;
+  photoCount: number;
+  photos: CasePhotoSummaryItem[];
+  consolidatedVerificationStatus: VerificationStatusType;
+  priorityScore: number | null;
+  priorityLevel: string | null;
+  rankPosition: number | null;
+  insurancePolicyNo: string | null;
+  coordinationRemarks: string | null;
+}
+
+export interface ConsolidatedCaseDossierDTO extends CropLossCaseVerificationListItem {
+  assessment: {
+    id: string;
+    assessedDamagePercent: number;
+    assessedAreaHa: number;
+    cropStage: string;
+    assessorNotes: string | null;
+    assessedAt: string;
+  } | null;
+  priorityFormula: {
+    damageBasis: string;
+    applicableDamagePercent: number;
+    daysElapsed: number;
+    explanation: string;
+  } | null;
+  auditLogs: {
+    id: string;
+    action: string;
+    module: string;
+    timestamp: string;
+    roleSnapshot: string | null;
+    user?: {
+      fullName: string;
+      username: string;
+      role: string;
+    } | null;
+    newValues?: any;
+    previousValues?: any;
+  }[];
 }

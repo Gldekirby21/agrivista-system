@@ -2,9 +2,22 @@ import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
 const SESSION_COOKIE_NAME = "omag_session_token";
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET || "omag-polomolok-dev-secret-key-2026-super-secure-token"
-);
+function getMiddlewareJwtSecret(): Uint8Array {
+  const secret = process.env.AUTH_SECRET;
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (secret && secret.trim().length > 0) {
+    return new TextEncoder().encode(secret.trim());
+  }
+
+  if (isProduction) {
+    throw new Error(
+      "[FATAL SECURITY CONFIGURATION ERROR] AUTH_SECRET environment variable is missing in production runtime."
+    );
+  }
+
+  return new TextEncoder().encode("omag-polomolok-dev-secret-key-2026-super-secure-token");
+}
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -13,7 +26,8 @@ export async function proxy(request: NextRequest) {
   let session: { role: "OMAG_HEAD" | "OMAG_STAFF" } | null = null;
   if (token) {
     try {
-      const { payload } = await jwtVerify(token, JWT_SECRET);
+      const secret = getMiddlewareJwtSecret();
+      const { payload } = await jwtVerify(token, secret);
       session = { role: payload.role as "OMAG_HEAD" | "OMAG_STAFF" };
     } catch {
       session = null;
@@ -29,7 +43,7 @@ export async function proxy(request: NextRequest) {
 
     // 2. Role restriction: OMAG_STAFF attempting /head/*
     if (pathname.startsWith("/head") && session.role !== "OMAG_HEAD") {
-      const staffUrl = new URL("/staff/dashboard", request.url);
+      const staffUrl = new URL("/staff/beneficiaries", request.url);
       return NextResponse.redirect(staffUrl);
     }
 
@@ -43,7 +57,7 @@ export async function proxy(request: NextRequest) {
   // 4. Authenticated user visiting /login
   if (pathname === "/login" && session) {
     const targetUrl = new URL(
-      session.role === "OMAG_HEAD" ? "/head/dashboard" : "/staff/dashboard",
+      session.role === "OMAG_HEAD" ? "/head/dashboard" : "/staff/beneficiaries",
       request.url
     );
     return NextResponse.redirect(targetUrl);
@@ -61,4 +75,4 @@ export const config = {
 };
 
 export const middleware = proxy;
-
+export default proxy;

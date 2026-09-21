@@ -19,5 +19,5 @@ export default async function RootPage() {
     redirect("/head/dashboard");
   }
 
-  redirect("/staff/dashboard");
+  redirect("/staff/beneficiaries");
 }

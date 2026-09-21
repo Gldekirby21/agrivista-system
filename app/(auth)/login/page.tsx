@@ -20,7 +20,7 @@ export default async function LoginPage() {
     if (session.role === "OMAG_HEAD") {
       redirect("/head/dashboard");
     } else {
-      redirect("/staff/dashboard");
+      redirect("/staff/beneficiaries");
     }
   }
 

@@ -1,17 +1,17 @@
 import { z } from "zod";
 
 export const PredictYieldInputSchema = z.object({
-  cropId: z.number().int().positive(),
+  cropId: z.number().int().positive("A valid standing crop selection is required"),
   reportId: z.number().int().positive().optional().nullable(),
-  cropType: z.string().min(1, "Crop type is required"),
-  barangay: z.string().default("Poblacion"),
-  season: z.string().default("Wet"),
-  soilType: z.string().default("Volcanic Loam"),
-  plantedAreaHa: z.number().positive("Planted area must be positive"),
+  cropType: z.string().min(1, "Crop type is required").optional(),
+  barangay: z.string().optional(),
+  season: z.string().optional(),
+  soilType: z.string().optional(),
+  plantedAreaHa: z.number().positive("Planted area must be positive").optional(),
   baselineYieldTonsHa: z.number().positive().optional().nullable(),
   calamityDamagePercent: z.number().min(0).max(100).optional().nullable(),
-  cropUnitPricePhpKg: z.number().positive().optional().nullable(),
-  calamityOccurrences: z.number().int().min(0).default(0),
+  cropUnitPricePhpKg: z.number().positive("Farmgate price must be greater than zero").optional().nullable(),
+  calamityOccurrences: z.number().int().min(0).optional().default(0),
   historicalYield: z.number().positive().optional().nullable(),
 });
 

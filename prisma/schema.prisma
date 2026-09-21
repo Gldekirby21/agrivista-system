@@ -56,6 +56,13 @@ enum ClaimStatus {
   REQUIRES_CORRECTION
 }
 
+enum DistributionRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  DISTRIBUTED
+}
+
 // ------------------------------------------------------------------------------
 // 1. USER ACCOUNT & RBAC
 // ------------------------------------------------------------------------------
@@ -75,6 +82,10 @@ model User {
   reports       DamageReport[]
   distributions DistributionRecord[]
   photoVerifications PhotoVerification[]
+  headApprovedClaims PcicClaim[]        @relation("HeadApprovedClaims")
+  requestedDistributionRequests DistributionRequest[] @relation("StaffDistributionRequests")
+  headApprovedDistributionRequests DistributionRequest[] @relation("HeadApprovedDistributionRequests")
+  executedDistributionRequests DistributionRequest[] @relation("StaffExecutedDistributions")
 }
 
 // ------------------------------------------------------------------------------
@@ -257,6 +268,7 @@ model DamageReport {
   updatedAt          DateTime               @updatedAt
 
   photos             DamagePhoto[]
+  photoVerifications PhotoVerification[]
   assessment         DamageAssessment?
   prediction         CropPrediction?
   pcicClaim          PcicClaim?
@@ -336,6 +348,10 @@ model PhotoVerification {
   parcelId                  Int
   parcel                    FarmParcel   @relation(fields: [parcelId], references: [id], onDelete: Cascade)
   
+  // Optional Link to Crop-Loss Incident / Case Docket (Objective #6 Integration)
+  damageReportId            Int?
+  damageReport              DamageReport? @relation(fields: [damageReportId], references: [id], onDelete: SetNull)
+  
   // Storage references (uses abstract StorageProvider, local or Supabase)
   storageProvider           String       @default("LOCAL")
   bucketName                String       @default("agrivista-verifications")
@@ -394,6 +410,7 @@ model PhotoVerification {
   @@index([farmerId])
   @@index([farmId])
   @@index([parcelId])
+  @@index([damageReportId])
   @@index([verificationStatus])
   @@index([createdAt(sort: Desc)])
 }
@@ -469,6 +486,15 @@ model PcicClaim {
   reviewedAt         DateTime?
   reviewedBy         String?
 
+  // ----------------------------------------------------------------------------
+  // PROPOSED SYSTEM DESIGN: OMAG Head Approval Gate for Crop-Loss Prediction
+  // ----------------------------------------------------------------------------
+  headApprovalStatus  String?                @default("PENDING") // PENDING, APPROVED, REJECTED
+  headApprovedById    String?
+  headApprovedBy      User?                  @relation("HeadApprovedClaims", fields: [headApprovedById], references: [id], onDelete: SetNull)
+  headApprovedAt      DateTime?
+  headApprovalRemarks String?
+
   priorityScore      ClaimPriorityScore?
 
   @@index([claimStatus])
@@ -507,6 +533,7 @@ model InventoryItem {
   updatedAt          DateTime               @updatedAt
 
   batches            InventoryBatch[]
+  distributionRequests DistributionRequest[]
 }
 
 // ------------------------------------------------------------------------------
@@ -541,8 +568,11 @@ model DistributionRecord {
   id                 String                 @id @default(uuid())
   batchId            String
   batch              InventoryBatch         @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  farmerId           Int
-  farmer             Farmer                 @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  farmerId           Int?
+  farmer             Farmer?                @relation(fields: [farmerId], references: [id], onDelete: Cascade)
+  barangay           String?
+  requestId          String?
+  request            DistributionRequest?   @relation(fields: [requestId], references: [id], onDelete: SetNull)
   quantityDistributed Float
   unit               String
   distributionDate   DateTime               @default(now())
@@ -553,7 +583,52 @@ model DistributionRecord {
 
   @@index([batchId])
   @@index([farmerId])
+  @@index([requestId])
+  @@index([barangay])
   @@index([distributionDate])
+}
+
+// ------------------------------------------------------------------------------
+// 18b. BARANGAY RESOURCE DISTRIBUTION REQUEST & APPROVAL
+// 🟡 PROPOSED SYSTEM DESIGN: Multi-Tier Approval Gate for Priority-Driven Aid
+// ------------------------------------------------------------------------------
+model DistributionRequest {
+  id                  String                    @id @default(uuid())
+  requestNumber       String                    @unique
+  barangay            String
+  itemId              Int
+  item                InventoryItem             @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  requestedQuantity   Float
+  unit                String
+  resourceType        String?                   // FERTILIZER | SEEDS | OTHER
+  remarks             String?
+  status              DistributionRequestStatus @default(PENDING)
+
+  // Requesting Staff
+  requestedById       String
+  requestedBy         User                      @relation("StaffDistributionRequests", fields: [requestedById], references: [id])
+  requestedAt         DateTime                  @default(now())
+
+  // OMAG Head Approval Gate
+  approvedById        String?
+  approvedBy          User?                     @relation("HeadApprovedDistributionRequests", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt          DateTime?
+  approvalRemarks     String?
+
+  // Distribution Execution
+  distributedAt       DateTime?
+  distributedById     String?
+  distributedBy       User?                     @relation("StaffExecutedDistributions", fields: [distributedById], references: [id], onDelete: SetNull)
+
+  // Distribution Records resulting from FIFO execution
+  distributions       DistributionRecord[]
+
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([barangay])
+  @@index([status])
+  @@index([requestedAt(sort: Desc)])
 }
 
 // ------------------------------------------------------------------------------
@@ -573,29 +648,37 @@ model HistoricalAgriculturalData {
   fertilizerUsageBags Float?
   soilType           String?
   calamityOccurrences Int                   @default(0)
+  status             String                 @default("ACTIVE")
   createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @default(now()) @updatedAt
 
   @@index([barangay, cropType, year])
+  @@index([status])
 }
 
 // ------------------------------------------------------------------------------
 // 20. RESOURCE DEMAND FORECAST
 // ------------------------------------------------------------------------------
 model ResourceDemandForecast {
-  id                 String                 @id @default(uuid())
-  barangay           String
-  cropType           String
-  forecastYear       Int
-  forecastSeason     String
-  projectedAreaHa    Float
-  forecastSeedKg     Float
+  id                     String                 @id @default(uuid())
+  barangay               String
+  cropType               String
+  forecastYear           Int
+  forecastSeason         String
+  projectedAreaHa        Float
+  forecastSeedKg         Float
   forecastFertilizerBags Float
-  methodUsed         String
-  confidenceMetric   Float?
-  limitationsNotice  String
-  generatedAt        DateTime               @default(now())
+  methodUsed             String
+  confidenceMetric       Float?
+  limitationsNotice      String
+  projectedFarmers       Int?
+  modelVersion           String?
+  isSynthetic            Boolean                @default(true)
+  createdById            String?
+  generatedAt            DateTime               @default(now())
 
   @@index([barangay, forecastYear])
+  @@index([cropType])
 }
 
 // ------------------------------------------------------------------------------

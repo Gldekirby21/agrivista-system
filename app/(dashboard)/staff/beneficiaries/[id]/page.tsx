@@ -38,8 +38,8 @@ export default async function StaffBeneficiaryDetailPage({ params }: Props) {
         subtitle={`RSBSA Record for ${beneficiary.firstName} ${beneficiary.lastName}`}
         role="OMAG_STAFF"
       />
-      <main className="flex-1 p-6 md:p-8">
-        <div className="max-w-7xl mx-auto space-y-6">
+      <main className="flex-1 p-4 md:p-5">
+        <div className="max-w-7xl mx-auto space-y-4">
           <BeneficiaryDetails
             beneficiary={beneficiary}
             isStaff={true}

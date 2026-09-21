@@ -99,7 +99,7 @@ export function verifyPhotoMetadata(
       deterministicStatus: "NOT_ACCEPTED",
       failureReasonCode: "ERR_PHOTO_GPS_MISSING",
       verificationNotes:
-        "Photo lacks embedded EXIF GPS coordinates. Geolocation audit cannot be performed.",
+        "GPS metadata unavailable; embedded GPS information cannot be independently verified.",
     };
   }
 
@@ -159,8 +159,26 @@ export function verifyPhotoMetadata(
 
   // Check 5: Timestamp verification
   let timestampStatus: TimestampStatusType = "VALID";
+  let isQuestionableTimestamp = false;
+  let timestampQuestionableReason = "";
+
   if (!timestampAvailable) {
     timestampStatus = "TIMESTAMP_MISSING";
+  } else {
+    const timeMs = timestamp!.getTime();
+    const nowMs = Date.now();
+    const futureToleranceMs = 24 * 60 * 60 * 1000; // 24 hours future tolerance for time zone skew
+    const minAcceptableYear = 2000;
+
+    if (timeMs > nowMs + futureToleranceMs) {
+      timestampStatus = "OUT_OF_RANGE";
+      isQuestionableTimestamp = true;
+      timestampQuestionableReason = `Photo timestamp (${timestamp!.toISOString()}) is set in the future. System clock anomaly or metadata inconsistency detected.`;
+    } else if (timestamp!.getFullYear() < minAcceptableYear) {
+      timestampStatus = "OUT_OF_RANGE";
+      isQuestionableTimestamp = true;
+      timestampQuestionableReason = `Photo timestamp (${timestamp!.toISOString()}) pre-dates year ${minAcceptableYear}. Unreliable hardware clock or corrupted metadata detected.`;
+    }
   }
 
   // Determine final deterministic status
@@ -176,6 +194,10 @@ export function verifyPhotoMetadata(
     deterministicStatus = "REVIEW";
     failureReasonCode = "WARN_TIMESTAMP_MISSING";
     verificationNotes = `Photo GPS matches registered parcel centroid (${calculatedDistanceMeters.toFixed(1)}m <= ${thresholdMeters}m), but timestamp is missing from EXIF metadata. Manual verification required.`;
+  } else if (isQuestionableTimestamp) {
+    deterministicStatus = "REVIEW";
+    failureReasonCode = "WARN_TIMESTAMP_INCONSISTENT";
+    verificationNotes = `Photo GPS matches registered parcel centroid (${calculatedDistanceMeters.toFixed(1)}m <= ${thresholdMeters}m), but ${timestampQuestionableReason} Manual verification required.`;
   } else {
     deterministicStatus = "ACCEPTED";
     failureReasonCode = null;

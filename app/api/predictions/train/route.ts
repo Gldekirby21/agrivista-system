@@ -4,7 +4,7 @@ import { TrainModelInputSchema } from "@/features/yield-loss/validation/schemas"
 import { trainCropYieldModel } from "@/features/yield-loss/services/predictionService";
 
 export async function POST(req: NextRequest) {
-  const auth = await requireRole(["OMAG_STAFF"], req);
+  const auth = await requireRole(["OMAG_HEAD", "OMAG_STAFF"], req);
   if (!auth.authorized) {
     return auth.response;
   }

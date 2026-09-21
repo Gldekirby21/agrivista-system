@@ -1,10 +1,8 @@
-// ==============================================================================
-// Objective 5 Feature Module: Historical Crop Yield & Resource-Demand Forecasting
-// Isolated boundary for Phase 5 implementation
-// ==============================================================================
+/**
+ * Objective 5: Historical Crop Yield & Resource-Demand Modeling Feature Module
+ * OMAG Polomolok Agricultural Resource Distribution and Production Analytics System
+ */
 
-export const RESOURCE_DEMAND_MODULE_INFO = {
-  objective: 5,
-  title: "Historical Crop Yield & Resource-Demand Forecasting",
-  status: "pending_phase_5",
-};
+export * from "./types";
+export * from "./validation/schemas";
+export * from "./services/resourceDemandService";

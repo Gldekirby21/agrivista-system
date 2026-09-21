@@ -10,3 +10,6 @@ export * from "./services/deterministicVerifier";
 export * from "./services/geminiAdvisor";
 export * from "./services/conflictGuard";
 export * from "./services/verificationService";
+export * from "./components/PhotoVerificationNewForm";
+export * from "./components/PhotoVerificationList";
+export * from "./components/PhotoVerificationDetail";

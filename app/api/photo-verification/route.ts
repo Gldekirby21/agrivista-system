@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, requireRole } from "@/lib/permissions/guards";
 import {
   getPhotoVerifications,
+  getCropLossCaseVerifications,
   createPhotoVerification,
   PhotoUploadSchema,
   QueryVerificationSchema,
@@ -19,12 +20,20 @@ export async function GET(req: NextRequest) {
       search: searchParams.get("search") || undefined,
       barangay: searchParams.get("barangay") || undefined,
       status: searchParams.get("status") || undefined,
+      caseStatus: searchParams.get("caseStatus") || undefined,
+      priorityLevel: searchParams.get("priorityLevel") || undefined,
       aiAssessment: searchParams.get("aiAssessment") || undefined,
+      mode: (searchParams.get("mode") as any) || "cases",
       page: searchParams.get("page") || 1,
       limit: searchParams.get("limit") || 15,
     });
 
-    const result = await getPhotoVerifications(query);
+    if (query.mode === "photos") {
+      const result = await getPhotoVerifications(query);
+      return NextResponse.json(result);
+    }
+
+    const result = await getCropLossCaseVerifications(query);
     return NextResponse.json(result);
   } catch (error: any) {
     return NextResponse.json(

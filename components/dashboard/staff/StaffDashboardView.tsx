@@ -29,11 +29,11 @@ export const StaffDashboardView: React.FC = () => {
           </div>
         </div>
 
-        {/* Source-of-Truth & Data Disclaimer Banner */}
+        {/* Data Source Notice */}
         <div className="mt-4 rounded border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-900">
-          <p className="font-semibold">Notice: Synthetic Demonstration Data — Not Actual OMAG Records</p>
+          <p className="font-semibold">Notice: Record counts reflect the live municipal database.</p>
           <p className="mt-0.5 text-[11px] text-amber-800">
-            Field workflows and operational procedures are marked as PROPOSED SYSTEM DESIGN / PENDING OMAG CONFIRMATION.
+            Modules marked as pending are part of the implementation roadmap. No statistics are fabricated. Operational workflows requiring OMAG confirmation are marked as PROPOSED SYSTEM DESIGN.
           </p>
         </div>
       </div>
