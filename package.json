@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "ml": ".\\.venv\\Scripts\\python.exe -m uvicorn api.main:app --app-dir python --host 127.0.0.1 --port 8000 --reload",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
