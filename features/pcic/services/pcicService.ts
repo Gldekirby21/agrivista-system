@@ -36,14 +36,14 @@ function generateReferenceNumbers(): { reportNumber: string; claimNumber: string
 }
 
 /**
- * Re-ranks all OMAG_HEAD-approved claims in the database and updates ClaimPriorityScore records atomically.
- * Only claims with headApprovalStatus === "APPROVED" participate in priority ranking.
- * BLOCKED, PENDING, and DECLINED claims are excluded.
+ * Re-ranks eligible claims in the database and updates ClaimPriorityScore records atomically.
+ * Claims that are APPROVED or PENDING participate in priority ranking.
+ * Explicitly REJECTED, DECLINED, or SETTLED claims are excluded.
  */
 export async function syncCohortRankings(tx: any = prisma): Promise<void> {
   const claims = await tx.pcicClaim.findMany({
     where: {
-      headApprovalStatus: "APPROVED",
+      headApprovalStatus: { notIn: ["REJECTED", "DECLINED"] },
     },
     include: {
       report: {
@@ -678,16 +678,28 @@ export async function recalculateAllPriorities(
 
 /**
  * Retrieves the prioritized leaderboard of claims sorted by rankPosition ASC.
+ * Automatically synchronizes cohort rankings before querying to ensure all
+ * pending and approved claims are scored and ranked.
  */
 export async function getPriorityLeaderboard(limit: number = 20): Promise<any[]> {
+  // Sync cohort rankings so any newly added or pending claims are scored and assigned rank positions
+  try {
+    await syncCohortRankings(prisma);
+  } catch (syncErr) {
+    console.error("syncCohortRankings error inside getPriorityLeaderboard (continuing):", syncErr);
+  }
+
   return await prisma.claimPriorityScore.findMany({
     where: {
       claim: {
-        headApprovalStatus: "APPROVED",
+        headApprovalStatus: { notIn: ["REJECTED", "DECLINED"] },
       },
     },
     take: limit,
-    orderBy: { rankPosition: "asc" },
+    orderBy: [
+      { rankPosition: "asc" },
+      { score: "desc" },
+    ],
     include: {
       claim: {
         include: {
@@ -697,6 +709,12 @@ export async function getPriorityLeaderboard(limit: number = 20): Promise<any[]>
               crop: true,
               parcel: { include: { farm: true } },
               assessment: true,
+              photoVerifications: {
+                select: {
+                  id: true,
+                  systemReviewStatus: true,
+                },
+              },
             },
           },
         },

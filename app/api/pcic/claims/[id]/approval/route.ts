@@ -112,6 +112,14 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       console.error("POST /approval audit log error (non-blocking):", auditErr);
     }
 
+    // Re-rank cohort based on updated approval status
+    try {
+      const { syncCohortRankings } = await import("@/features/pcic/services/pcicService");
+      await syncCohortRankings(prisma);
+    } catch (rankErr) {
+      console.error("POST /approval syncCohortRankings error (non-blocking):", rankErr);
+    }
+
     return NextResponse.json({
       success: true,
       data: updatedClaim,

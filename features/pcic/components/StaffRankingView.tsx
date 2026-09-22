@@ -41,6 +41,7 @@ interface LeaderboardItem {
     id: string;
     claimNumber: string;
     claimStatus: string;
+    headApprovalStatus?: string | null;
     filingDate: string;
     report: {
       reportNumber: string;
@@ -58,6 +59,10 @@ interface LeaderboardItem {
       assessment?: {
         assessedDamagePercent: number;
       } | null;
+      photoVerifications?: Array<{
+        id: string;
+        systemReviewStatus?: string | null;
+      }>;
     };
   };
 }
@@ -72,6 +77,7 @@ interface BarangayStat {
   sumDamage: number;
   priority: "HIGH" | "MEDIUM" | "LOW";
   claims: LeaderboardItem[];
+  requestStatus?: "NONE" | "PENDING" | "APPROVED" | "DISTRIBUTED";
 }
 
 function StaffRankingContent() {
@@ -167,19 +173,35 @@ function StaffRankingContent() {
     return map;
   }, [requests]);
 
-  // Compute unified barangay stats with aggregated claims (Active unserviced queue)
+  // Track pending barangay distribution requests awaiting OMAG Head approval
+  const pendingRequestsBarangayMap = useMemo(() => {
+    const map = new Map<string, DistributionRequestDTO[]>();
+    requests.forEach((r) => {
+      if (r.status === "PENDING") {
+        const key = r.barangay.trim().toLowerCase();
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(r);
+      }
+    });
+    return map;
+  }, [requests]);
+
+  // Compute unified barangay stats with aggregated claims
+  // NOTE: Barangays stay in this ranking view even if a request is PENDING.
+  // Once APPROVED or DISTRIBUTED by OMAG Head, they graduate to the Distribution Requests & FIFO Execution tab.
   const barangaySummary: BarangayStat[] = useMemo(() => {
     const map = new Map<string, BarangayStat>();
 
     leaderboardItems.forEach((item) => {
       const brgy = item.claim?.report?.farmer?.barangay || "Unassigned";
 
-      // If the barangay has already been approved or distributed by OMAG Head, exclude from active priority ranking
+      // If the barangay has already been APPROVED or DISTRIBUTED by OMAG Head, exclude from active priority ranking
       if (servicedBarangaysMap.has(brgy.trim().toLowerCase())) {
         return;
       }
 
       if (!map.has(brgy)) {
+        const isPending = pendingRequestsBarangayMap.has(brgy.trim().toLowerCase());
         map.set(brgy, {
           barangay: brgy,
           high: 0,
@@ -190,6 +212,7 @@ function StaffRankingContent() {
           sumDamage: 0,
           priority: "LOW",
           claims: [],
+          requestStatus: isPending ? "PENDING" : "NONE",
         });
       }
       const entry = map.get(brgy)!;
@@ -221,7 +244,7 @@ function StaffRankingContent() {
       if (b.avgDamage !== a.avgDamage) return b.avgDamage - a.avgDamage;
       return b.total - a.total;
     });
-  }, [leaderboardItems, servicedBarangaysMap]);
+  }, [leaderboardItems, servicedBarangaysMap, pendingRequestsBarangayMap]);
 
   // Total serviced barangays count
   const servicedBarangaysCount = servicedBarangaysMap.size;
@@ -489,6 +512,12 @@ function StaffRankingContent() {
                                   LOW PRIORITY
                                 </span>
                               )}
+                              {stat.requestStatus === "PENDING" && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                  <Clock className="h-3 w-3 text-purple-600" />
+                                  <span>REQUEST PENDING REVIEW</span>
+                                </span>
+                              )}
                             </div>
                             <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
                               <span><strong>{stat.total}</strong> affected case{stat.total !== 1 ? "s" : ""}</span>
@@ -542,11 +571,21 @@ function StaffRankingContent() {
                           <button
                             type="button"
                             onClick={() => handleOpenDistributionModal(stat.barangay)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 text-white font-bold text-xs hover:bg-emerald-800 transition-colors shadow-2xs cursor-pointer"
-                            title={`Initiate resource distribution request for Brgy. ${stat.barangay}`}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-colors shadow-2xs cursor-pointer ${
+                              stat.requestStatus === "PENDING"
+                                ? "bg-purple-50 text-purple-700 border border-purple-300 hover:bg-purple-100"
+                                : "bg-emerald-700 text-white hover:bg-emerald-800"
+                            }`}
+                            title={
+                              stat.requestStatus === "PENDING"
+                                ? `A distribution request for Brgy. ${stat.barangay} is currently pending OMAG Head review. Click to submit another request.`
+                                : `Initiate resource distribution request for Brgy. ${stat.barangay}`
+                            }
                           >
                             <Package className="h-3.5 w-3.5" />
-                            <span>Distribution</span>
+                            <span>
+                              {stat.requestStatus === "PENDING" ? "Request Pending" : "Distribution"}
+                            </span>
                           </button>
 
                           <button
@@ -626,8 +665,28 @@ function StaffRankingContent() {
                                           {item.claim?.report?.farmer?.firstName} {item.claim?.report?.farmer?.lastName}
                                         </span>
                                         <span className="text-[10px] text-slate-500 font-mono">
-                                          (Municipal Rank #{item.rankPosition})
+                                          (Municipal Rank #{item.rankPosition ?? "—"})
                                         </span>
+                                        {(() => {
+                                          const photos = item.claim?.report?.photoVerifications || [];
+                                          const isConfirmed = photos.some((p) => p.systemReviewStatus === "CONFIRMED") || item.claim?.headApprovalStatus === "APPROVED";
+                                          const isPending = photos.some((p) => p.systemReviewStatus === "REQUIRES_REVIEW" || !p.systemReviewStatus || p.systemReviewStatus === "PENDING");
+                                          if (isConfirmed) {
+                                            return (
+                                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                                PHOTO VERIFIED
+                                              </span>
+                                            );
+                                          }
+                                          if (photos.length > 0) {
+                                            return (
+                                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                                PHOTO PENDING APPROVAL
+                                              </span>
+                                            );
+                                          }
+                                          return null;
+                                        })()}
                                       </div>
 
                                       <div className="text-[11px] text-slate-600 flex flex-wrap items-center gap-2">

@@ -300,13 +300,6 @@ export const PredictionGenerator: React.FC<PredictionGeneratorProps> = ({
     setError(null);
 
     try {
-      // Validate OMAG Head approval if this crop is linked to a damage report
-      if (linkedDamageReport && (linkedDamageReport as any).pcicClaim?.headApprovalStatus !== "APPROVED") {
-        throw new Error(
-          `Crop-loss case (Report #${linkedDamageReport.reportNumber}) requires OMAG Head approval before prediction can be processed. Current status: ${(linkedDamageReport as any).pcicClaim?.headApprovalStatus || "PENDING"}.`
-        );
-      }
-
       // Validate farmgate price if provided
       let priceVal: number | undefined = undefined;
       if (scenarioData.cropUnitPricePhpKg && scenarioData.cropUnitPricePhpKg.trim() !== "") {
@@ -731,33 +724,6 @@ export const PredictionGenerator: React.FC<PredictionGeneratorProps> = ({
                   {linkedDamageReport.assessment.assessedDamagePercent}% assessed severity • {linkedDamageReport.assessment.cropStage} stage ({linkedDamageReport.assessment.assessedAreaHa} ha evaluated).
                 </div>
               )}
-
-              {/* OMAG Head Approval Gate Status */}
-              {linkedDamageReport && (
-                <div className="rounded-lg border p-2.5 text-[11px] space-y-1 bg-slate-50">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-700">OMAG Head Approval Gate:</span>
-                    {(linkedDamageReport as any).pcicClaim?.headApprovalStatus === "APPROVED" ? (
-                      <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded">
-                        <CheckCircle className="h-3 w-3" /> Approved for Prediction
-                      </span>
-                    ) : (linkedDamageReport as any).pcicClaim?.headApprovalStatus === "REJECTED" ? (
-                      <span className="inline-flex items-center gap-1 font-bold text-red-700 bg-red-100 border border-red-300 px-2 py-0.5 rounded">
-                        <XCircle className="h-3 w-3" /> Rejected by Head
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 font-bold text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded">
-                        <Clock className="h-3 w-3" /> Pending Head Approval
-                      </span>
-                    )}
-                  </div>
-                  {(linkedDamageReport as any).pcicClaim?.headApprovalStatus !== "APPROVED" && (
-                    <p className="text-[10px] text-amber-800 italic">
-                      ⚠️ Case is not yet approved by OMAG Head. Prediction generation is gated.
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
 
             {/* Assessed Damage Input or Locked Field */}
@@ -880,11 +846,7 @@ export const PredictionGenerator: React.FC<PredictionGeneratorProps> = ({
 
             <button
               type="submit"
-              disabled={
-                submitting ||
-                !selectedCropId ||
-                Boolean(linkedDamageReport && (linkedDamageReport as any)?.pcicClaim?.headApprovalStatus !== "APPROVED")
-              }
+              disabled={submitting || !selectedCropId}
               className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-6 py-2.5 shadow-sm hover:shadow-md transition-all disabled:opacity-50 cursor-pointer"
             >
               {submitting ? (

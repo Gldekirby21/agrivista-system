@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from "react";
 import { Modal } from "@/components/common/Modal";
-import { Send, AlertTriangle, CheckCircle, Boxes, UserCheck } from "lucide-react";
+import { Send, AlertTriangle, CheckCircle, Boxes, UserCheck, MapPin, Filter } from "lucide-react";
 import { InventoryItemDTO, FifoCalculationResult } from "../types";
+import { POLOMOLOK_BARANGAYS } from "@/features/rsbsa/types";
 
 interface FarmerOption {
   id: number;
@@ -18,6 +19,7 @@ interface DistributeStockModalProps {
   onClose: () => void;
   onSuccess: () => void;
   defaultItemId?: number;
+  initialBarangay?: string;
 }
 
 export const DistributeStockModal: React.FC<DistributeStockModalProps> = ({
@@ -25,10 +27,12 @@ export const DistributeStockModal: React.FC<DistributeStockModalProps> = ({
   onClose,
   onSuccess,
   defaultItemId,
+  initialBarangay = "ALL",
 }) => {
   const [items, setItems] = useState<InventoryItemDTO[]>([]);
   const [farmers, setFarmers] = useState<FarmerOption[]>([]);
   const [loadingPrereqs, setLoadingPrereqs] = useState(false);
+  const [selectedBarangay, setSelectedBarangay] = useState<string>(initialBarangay);
 
   const [itemId, setItemId] = useState<string>(defaultItemId ? defaultItemId.toString() : "");
   const [farmerId, setFarmerId] = useState<string>("");
@@ -43,19 +47,29 @@ export const DistributeStockModal: React.FC<DistributeStockModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      loadPrerequisites();
+      if (initialBarangay) {
+        setSelectedBarangay(initialBarangay);
+      }
+      loadPrerequisites(initialBarangay || selectedBarangay);
       if (defaultItemId) {
         setItemId(defaultItemId.toString());
       }
     }
-  }, [isOpen, defaultItemId]);
+  }, [isOpen, defaultItemId, initialBarangay]);
 
-  const loadPrerequisites = async () => {
+  const loadPrerequisites = async (brgyFilter = selectedBarangay) => {
     setLoadingPrereqs(true);
+    setError(null);
     try {
+      const farmerUrl = new URL("/api/beneficiaries", window.location.origin);
+      farmerUrl.searchParams.set("limit", "100");
+      if (brgyFilter && brgyFilter !== "ALL") {
+        farmerUrl.searchParams.set("barangay", brgyFilter);
+      }
+
       const [itemRes, farmerRes] = await Promise.all([
         fetch("/api/inventory?limit=100"),
-        fetch("/api/beneficiaries?limit=100"),
+        fetch(farmerUrl.toString()),
       ]);
 
       if (itemRes.ok) {
@@ -68,9 +82,14 @@ export const DistributeStockModal: React.FC<DistributeStockModalProps> = ({
 
       if (farmerRes.ok) {
         const farmerData = await farmerRes.json();
-        setFarmers(farmerData.records || farmerData.farmers || []);
-        if (farmerData.records?.length > 0) {
-          setFarmerId(farmerData.records[0].id.toString());
+        // /api/beneficiaries returns { items: [...] }
+        const beneficiaryList: FarmerOption[] =
+          farmerData.items || farmerData.records || farmerData.farmers || [];
+        setFarmers(beneficiaryList);
+        if (beneficiaryList.length > 0) {
+          setFarmerId(beneficiaryList[0].id.toString());
+        } else {
+          setFarmerId("");
         }
       }
     } catch (err) {
@@ -78,6 +97,11 @@ export const DistributeStockModal: React.FC<DistributeStockModalProps> = ({
     } finally {
       setLoadingPrereqs(false);
     }
+  };
+
+  const handleBarangayChange = (newBrgy: string) => {
+    setSelectedBarangay(newBrgy);
+    loadPrerequisites(newBrgy);
   };
 
   // Live FIFO calculation preview when item or quantity changes
@@ -188,6 +212,7 @@ export const DistributeStockModal: React.FC<DistributeStockModalProps> = ({
           </div>
         )}
 
+        {/* Row 1: Commodity Selection and Barangay Scope Filter */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
@@ -209,39 +234,77 @@ export const DistributeStockModal: React.FC<DistributeStockModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-              Beneficiary (RSBSA Farmer) *
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                Filter by Barangay
+              </span>
+              <span className="text-[10px] text-slate-400 font-normal">Optional filter</span>
             </label>
             <select
-              required
-              value={farmerId}
-              onChange={(e) => setFarmerId(e.target.value)}
+              value={selectedBarangay}
+              onChange={(e) => handleBarangayChange(e.target.value)}
               disabled={loadingPrereqs}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer"
             >
-              {farmers.map((f) => (
-                <option key={f.id} value={f.id}>
-                  {f.lastName}, {f.firstName} ({f.barangay}) {f.rsbsaNumber ? `— ${f.rsbsaNumber}` : ""}
+              <option value="ALL">All Barangays (Polomolok)</option>
+              {POLOMOLOK_BARANGAYS.map((b) => (
+                <option key={b} value={b}>
+                  Brgy. {b}
                 </option>
               ))}
             </select>
           </div>
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-            Requested Quantity {selectedItem ? `(${selectedItem.unit})` : ""} *
-          </label>
-          <input
-            type="number"
-            step="any"
-            min="0.01"
-            required
-            placeholder="Enter quantity to distribute..."
-            value={requestedQuantity}
-            onChange={(e) => setRequestedQuantity(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-          />
+        {/* Row 2: Beneficiary Selector and Quantity */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1 flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                Beneficiary (RSBSA Farmer) *
+              </span>
+              <span className="text-[10px] text-emerald-700 font-semibold">
+                {farmers.length} {farmers.length === 1 ? "farmer" : "farmers"} loaded
+              </span>
+            </label>
+            <select
+              required
+              value={farmerId}
+              onChange={(e) => setFarmerId(e.target.value)}
+              disabled={loadingPrereqs || farmers.length === 0}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            >
+              {farmers.length === 0 ? (
+                <option value="">
+                  {loadingPrereqs ? "Loading beneficiaries..." : "No beneficiaries registered in this barangay"}
+                </option>
+              ) : (
+                farmers.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.lastName}, {f.firstName} (Brgy. {f.barangay}) {f.rsbsaNumber ? `— RSBSA: ${f.rsbsaNumber}` : ""}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+              Requested Quantity {selectedItem ? `(${selectedItem.unit})` : ""} *
+            </label>
+            <input
+              type="number"
+              step="any"
+              min="0.01"
+              required
+              placeholder="Enter quantity to distribute..."
+              value={requestedQuantity}
+              onChange={(e) => setRequestedQuantity(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            />
+          </div>
         </div>
 
         {/* Real-time Deterministic FIFO Allocation Breakdown */}

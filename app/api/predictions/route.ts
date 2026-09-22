@@ -11,16 +11,19 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
+  const rawPage = searchParams.get("page");
+  const rawLimit = searchParams.get("limit");
+
   const parsed = QueryPredictionSchema.safeParse({
     search: searchParams.get("search") || undefined,
     cropType: searchParams.get("cropType") || undefined,
     barangay: searchParams.get("barangay") || undefined,
-    page: searchParams.get("page") || undefined,
-    limit: searchParams.get("limit") || undefined,
+    page: rawPage && !isNaN(Number(rawPage)) ? Number(rawPage) : undefined,
+    limit: rawLimit && !isNaN(Number(rawLimit)) ? Number(rawLimit) : undefined,
   });
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid query parameters" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid query parameters", details: parsed.error.format() }, { status: 400 });
   }
 
   const { search, cropType, barangay, page, limit } = parsed.data;

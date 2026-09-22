@@ -48,11 +48,6 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
   const existingAssessment = report?.assessment;
   const photoVerifications: any[] = report?.photoVerifications || [];
 
-  // Head Approval State (PROPOSED SYSTEM DESIGN)
-  const headApprovalStatus = claim.headApprovalStatus || "PENDING";
-  const [headRemarks, setHeadRemarks] = useState(claim.headApprovalRemarks || "");
-  const [updatingApproval, setUpdatingApproval] = useState(false);
-
   // Evaluation Form State
   const [assessedDamagePercent, setAssessedDamagePercent] = useState<number>(
     existingAssessment?.assessedDamagePercent ?? report?.reportedDamagePercent ?? 0
@@ -141,35 +136,6 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
     }
   };
 
-  const handleHeadApproval = async (status: "APPROVED" | "REJECTED") => {
-    setUpdatingApproval(true);
-    setErrorMessage(null);
-    setSuccessMessage(null);
-
-    try {
-      const res = await fetch(`/api/pcic/claims/${claim.id}/approval`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          headApprovalStatus: status,
-          headApprovalRemarks: headRemarks.trim() || null,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to update approval status");
-      }
-
-      setSuccessMessage(`Case approval status successfully updated to ${status}.`);
-      router.refresh();
-    } catch (err: any) {
-      setErrorMessage(err.message || "Failed to update approval status");
-    } finally {
-      setUpdatingApproval(false);
-    }
-  };
-
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-16 text-xs">
       {/* Navigation and Title Bar */}
@@ -189,24 +155,6 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
             <span className="font-mono text-xs px-2.5 py-1 rounded-md bg-purple-100 text-purple-800 font-bold border border-purple-200">
               Report #{report?.reportNumber || `REP-${report?.id}`}
             </span>
-
-            {/* Approval Status Badge (PROPOSED SYSTEM DESIGN) */}
-            {headApprovalStatus === "APPROVED" ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 font-bold text-xs border border-emerald-300">
-                <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-                <span>Head Approved for Prediction</span>
-              </span>
-            ) : headApprovalStatus === "REJECTED" ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-100 text-red-800 font-bold text-xs border border-red-300">
-                <XCircle className="h-3.5 w-3.5 text-red-600" />
-                <span>Head Approval Rejected</span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-100 text-amber-800 font-bold text-xs border border-amber-300">
-                <Clock className="h-3.5 w-3.5 text-amber-600" />
-                <span>Pending OMAG Head Approval</span>
-              </span>
-            )}
           </div>
           <p className="text-slate-500 mt-1">
             Registered on {new Date(report?.createdAt || Date.now()).toLocaleDateString("en-PH", { dateStyle: "long" })} • Incident: {report?.incidentDate ? new Date(report.incidentDate).toLocaleDateString() : "—"}
@@ -250,47 +198,6 @@ export const EvaluationDetailView: React.FC<EvaluationDetailViewProps> = ({
         <div className="p-4 rounded-xl border border-red-200 bg-red-50 text-red-800 flex items-center gap-2.5 font-medium shadow-2xs">
           <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
           <span>{errorMessage}</span>
-        </div>
-      )}
-
-      {/* Head Approval Action Bar (When user is OMAG_HEAD) */}
-      {userRole === "OMAG_HEAD" && (
-        <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-2xl p-5 shadow-xs space-y-3">
-          <div className="flex items-center gap-2 text-purple-900 font-bold text-sm">
-            <UserCheck className="h-5 w-5 text-purple-700" />
-            <span>OMAG Head Case Review &amp; Prediction Approval</span>
-          </div>
-          <p className="text-slate-600 text-xs">
-            As OMAG Head, your authorization is required before this crop-loss case is eligible for ML Yield &amp; Loss Prediction processing.
-          </p>
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
-            <input
-              type="text"
-              placeholder="Approval or review remarks (optional)..."
-              value={headRemarks}
-              onChange={(e) => setHeadRemarks(e.target.value)}
-              className="flex-1 px-3 py-2 border border-purple-300 rounded-xl text-xs bg-white focus:ring-1 focus:ring-purple-600"
-            />
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                disabled={updatingApproval}
-                onClick={() => handleHeadApproval("APPROVED")}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-              >
-                Approve for Prediction
-              </button>
-              <button
-                type="button"
-                disabled={updatingApproval}
-                onClick={() => handleHeadApproval("REJECTED")}
-                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-              >
-                Reject Case
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

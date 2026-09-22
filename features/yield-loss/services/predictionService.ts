@@ -136,28 +136,6 @@ export async function createCropPrediction(
     ? crop.damageReports.find((r) => r.id === input.reportId)
     : (crop.damageReports.length > 0 ? crop.damageReports[0] : null);
 
-  // OMAG Head Approval Gate Enforcement (PROPOSED SYSTEM DESIGN)
-  // If prediction is specifically targeting a crop-loss report, verify Head Approval
-  if (input.reportId) {
-    const claim = (linkedReport as any)?.pcicClaim || (await prisma.pcicClaim.findUnique({
-      where: { reportId: input.reportId },
-    }));
-
-    if (!claim) {
-      const err: any = new Error(`Crop-loss case (Report #${input.reportId}) does not have an associated claim record.`);
-      err.statusCode = 404;
-      throw err;
-    }
-
-    if (claim.headApprovalStatus !== "APPROVED") {
-      const err: any = new Error(
-        `Crop-loss case (Report #${input.reportId}) requires OMAG Head approval before prediction can be processed. Current status: ${claim.headApprovalStatus || "PENDING"}.`
-      );
-      err.statusCode = 403;
-      throw err;
-    }
-  }
-
   let effectiveDamagePercent: number | null = null;
   if (linkedReport?.assessment) {
     // Locked to registered technical field assessment
