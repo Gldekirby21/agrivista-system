@@ -7,18 +7,13 @@ import {
   SUPPORTED_CROPS,
   SEASONS,
 } from "../types";
-import { Search, Filter, Edit2, Archive, AlertCircle, RefreshCw } from "lucide-react";
-import { ConfirmModal } from "@/components/common/ConfirmModal";
+import { Search, Filter, AlertCircle, RefreshCw } from "lucide-react";
 
 interface HistoricalDataTableProps {
-  isStaff?: boolean;
-  onEdit?: (record: HistoricalAgriculturalDataDTO) => void;
   onRefreshTrigger?: number;
 }
 
 export const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
-  isStaff = false,
-  onEdit,
   onRefreshTrigger = 0,
 }) => {
   const [records, setRecords] = useState<HistoricalAgriculturalDataDTO[]>([]);
@@ -27,6 +22,7 @@ export const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
 
   // Filters
   const [search, setSearch] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
   const [selectedBarangay, setSelectedBarangay] = useState("");
   const [selectedCrop, setSelectedCrop] = useState("");
   const [selectedSeason, setSelectedSeason] = useState("");
@@ -35,9 +31,18 @@ export const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
-  // Archive modal
-  const [recordToArchive, setRecordToArchive] = useState<HistoricalAgriculturalDataDTO | null>(null);
-  const [archiveLoading, setArchiveLoading] = useState(false);
+  // Sorting
+  const [sortField, setSortField] = useState<keyof HistoricalAgriculturalDataDTO | null>("year");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+
+  const handleSort = (field: keyof HistoricalAgriculturalDataDTO) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
 
   const fetchRecords = async () => {
     setLoading(true);
@@ -49,6 +54,7 @@ export const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
         status: statusFilter,
       });
       if (search.trim()) params.append("search", search.trim());
+      if (selectedYear) params.append("year", selectedYear);
       if (selectedBarangay) params.append("barangay", selectedBarangay);
       if (selectedCrop) params.append("cropType", selectedCrop);
       if (selectedSeason) params.append("season", selectedSeason);
@@ -70,7 +76,7 @@ export const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
 
   useEffect(() => {
     fetchRecords();
-  }, [page, statusFilter, selectedBarangay, selectedCrop, selectedSeason, onRefreshTrigger]);
+  }, [page, statusFilter, selectedYear, selectedBarangay, selectedCrop, selectedSeason, onRefreshTrigger]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,25 +84,21 @@ export const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
     fetchRecords();
   };
 
-  const handleConfirmArchive = async () => {
-    if (!recordToArchive) return;
-    setArchiveLoading(true);
-    try {
-      const res = await fetch(`/api/resource-demand/historical/${recordToArchive.id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Failed to archive record");
-      }
-      setRecordToArchive(null);
-      fetchRecords();
-    } catch (err: any) {
-      alert(`Archive failed: ${err.message}`);
-    } finally {
-      setArchiveLoading(false);
+  const sortedRecords = [...records].sort((a, b) => {
+    if (!sortField) return 0;
+    const valA = a[sortField];
+    const valB = b[sortField];
+    if (valA === null || valA === undefined) return 1;
+    if (valB === null || valB === undefined) return -1;
+    if (typeof valA === "number" && typeof valB === "number") {
+      return sortDirection === "asc" ? valA - valB : valB - valA;
     }
-  };
+    const strA = String(valA).toLowerCase();
+    const strB = String(valB).toLowerCase();
+    if (strA < strB) return sortDirection === "asc" ? -1 : 1;
+    if (strA > strB) return sortDirection === "asc" ? 1 : -1;
+    return 0;
+  });
 
   return (
     <div className="space-y-4">
@@ -129,6 +131,22 @@ export const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
           </form>
 
           <div className="flex flex-wrap items-center gap-2">
+            <select
+              name="filterYear"
+              value={selectedYear}
+              onChange={(e) => { setSelectedYear(e.target.value); setPage(1); }}
+              autoComplete="off"
+              data-lpignore="true"
+              data-form-type="other"
+              suppressHydrationWarning
+              className="text-xs border border-slate-200 rounded-lg px-2.5 py-2 bg-white text-slate-700"
+            >
+              <option value="">All Years</option>
+              {[2026, 2025, 2024, 2023, 2022, 2021, 2020].map((yr) => (
+                <option key={yr} value={yr}>{yr}</option>
+              ))}
+            </select>
+
             <select
               name="filterBarangay"
               value={selectedBarangay}
@@ -195,6 +213,7 @@ export const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
             <button
               onClick={() => {
                 setSearch("");
+                setSelectedYear("");
                 setSelectedBarangay("");
                 setSelectedCrop("");
                 setSelectedSeason("");
@@ -233,34 +252,113 @@ export const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
-                <th className="py-3 px-3">Year / Season</th>
-                <th className="py-3 px-3">Barangay</th>
-                <th className="py-3 px-3">Crop Type</th>
-                <th className="py-3 px-3">Planted / Harvested</th>
-                <th className="py-3 px-3">Production (t)</th>
-                <th className="py-3 px-3">Avg Yield (t/ha)</th>
-                <th className="py-3 px-3">Seed Used (kg)</th>
-                <th className="py-3 px-3">Fertilizer (bags)</th>
+                <th
+                  onClick={() => handleSort("year")}
+                  className="py-3 px-3 cursor-pointer select-none hover:bg-slate-100"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Year / Season</span>
+                    {sortField === "year" && (
+                      <span>{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("barangay")}
+                  className="py-3 px-3 cursor-pointer select-none hover:bg-slate-100"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Barangay</span>
+                    {sortField === "barangay" && (
+                      <span>{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("cropType")}
+                  className="py-3 px-3 cursor-pointer select-none hover:bg-slate-100"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Crop Type</span>
+                    {sortField === "cropType" && (
+                      <span>{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("plantedAreaHa")}
+                  className="py-3 px-3 cursor-pointer select-none hover:bg-slate-100"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Planted / Harvested</span>
+                    {sortField === "plantedAreaHa" && (
+                      <span>{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("productionTons")}
+                  className="py-3 px-3 cursor-pointer select-none hover:bg-slate-100"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Production (t)</span>
+                    {sortField === "productionTons" && (
+                      <span>{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("averageYieldTonsHa")}
+                  className="py-3 px-3 cursor-pointer select-none hover:bg-slate-100"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Avg Yield (t/ha)</span>
+                    {sortField === "averageYieldTonsHa" && (
+                      <span>{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("seedUsageKg")}
+                  className="py-3 px-3 cursor-pointer select-none hover:bg-slate-100"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Seed Used (kg)</span>
+                    {sortField === "seedUsageKg" && (
+                      <span>{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    )}
+                  </div>
+                </th>
+                <th
+                  onClick={() => handleSort("fertilizerUsageBags")}
+                  className="py-3 px-3 cursor-pointer select-none hover:bg-slate-100"
+                >
+                  <div className="flex items-center gap-1">
+                    <span>Fertilizer (bags)</span>
+                    {sortField === "fertilizerUsageBags" && (
+                      <span>{sortDirection === "asc" ? "▲" : "▼"}</span>
+                    )}
+                  </div>
+                </th>
                 <th className="py-3 px-3">Soil / Calamity</th>
                 <th className="py-3 px-3 text-center">Status</th>
-                {isStaff && <th className="py-3 px-3 text-center">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {loading ? (
                 <tr>
-                  <td colSpan={isStaff ? 11 : 10} className="py-8 text-center text-slate-400">
+                  <td colSpan={10} className="py-8 text-center text-slate-400">
                     Loading historical agricultural data...
                   </td>
                 </tr>
-              ) : records.length === 0 ? (
+              ) : sortedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={isStaff ? 11 : 10} className="py-8 text-center text-slate-400">
+                  <td colSpan={10} className="py-8 text-center text-slate-400">
                     No historical records found matching filter criteria.
                   </td>
                 </tr>
               ) : (
-                records.map((r) => (
+                sortedRecords.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
                     <td className="py-2.5 px-3 font-semibold text-slate-900 whitespace-nowrap">
                       {r.year} <span className="text-slate-500 font-normal">({r.season})</span>
@@ -305,30 +403,6 @@ export const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
                         {r.status}
                       </span>
                     </td>
-                    {isStaff && (
-                      <td className="py-2.5 px-3 text-center whitespace-nowrap">
-                        <div className="flex items-center justify-center gap-1">
-                          {onEdit && r.status === "ACTIVE" && (
-                            <button
-                              onClick={() => onEdit(r)}
-                              className="p-1 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-md transition-colors"
-                              title="Edit Record"
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                          {r.status === "ACTIVE" && (
-                            <button
-                              onClick={() => setRecordToArchive(r)}
-                              className="p-1 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-                              title="Archive Record"
-                            >
-                              <Archive className="h-3.5 w-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    )}
                   </tr>
                 ))
               )}
@@ -359,18 +433,6 @@ export const HistoricalDataTable: React.FC<HistoricalDataTableProps> = ({
           </div>
         )}
       </div>
-
-      {/* Confirmation Modal */}
-      <ConfirmModal
-        isOpen={recordToArchive !== null}
-        title="Archive Historical Agricultural Record"
-        message={`Are you sure you want to soft-archive record #${recordToArchive?.id} (${recordToArchive?.year} ${recordToArchive?.season} — ${recordToArchive?.cropType} in ${recordToArchive?.barangay})? The record will be preserved in the audit trail but excluded from active analytical calculations.`}
-        confirmText="Archive Record"
-        variant="danger"
-        isLoading={archiveLoading}
-        onConfirm={handleConfirmArchive}
-        onClose={() => setRecordToArchive(null)}
-      />
     </div>
   );
 };

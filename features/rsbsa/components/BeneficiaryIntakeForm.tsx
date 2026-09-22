@@ -190,14 +190,15 @@ export const BeneficiaryIntakeForm: React.FC<BeneficiaryIntakeFormProps> = ({
     remarks: "",
   });
 
-  // Active section for quick jump
   const [activeSection, setActiveSection] = useState("profile");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
   // Initialize auto-generated RSBSA ID on client
   useEffect(() => {
+    setMounted(true);
     setRsbsaId(generateRsbsaNumber("Poblacion"));
   }, []);
 
@@ -426,6 +427,17 @@ export const BeneficiaryIntakeForm: React.FC<BeneficiaryIntakeFormProps> = ({
     },
   ];
 
+  if (!mounted) {
+    return (
+      <div className="flex h-96 w-full items-center justify-center rounded-2xl border border-slate-200 bg-white p-12 shadow-xs">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
+          <p className="text-xs font-semibold text-slate-600">Loading intake form...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-24">
       {/* ── Top Header & Breadcrumb ── */}
@@ -614,7 +626,7 @@ export const BeneficiaryIntakeForm: React.FC<BeneficiaryIntakeFormProps> = ({
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} autoComplete="off" className="space-y-6">
         {/* ═════════════════════════════════════════════════════════════════════ */}
         {/* SECTION 1: BENEFICIARY PERSONAL PROFILE                                */}
         {/* ═════════════════════════════════════════════════════════════════════ */}

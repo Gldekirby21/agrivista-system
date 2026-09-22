@@ -1,15 +1,13 @@
 "use client";
 
 import React from "react";
-import { HistoricalAgriculturalDataDTO } from "../types";
 
 /**
  * DECOMMISSIONED PER APPROVED FDD
  * Objective 5 (Historical Crop Yield & Purchase Modeling) is strictly VIEW-ONLY.
- * Record editing is permanently decommissioned.
+ * Forecast generation modal is permanently decommissioned.
  */
-export const EditHistoricalDataModal: React.FC<{
-  record: HistoricalAgriculturalDataDTO | null;
+export const ForecastGeneratorModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   onSuccess?: () => void;

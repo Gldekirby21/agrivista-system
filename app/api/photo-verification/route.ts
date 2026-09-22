@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
       caseStatus: searchParams.get("caseStatus") || undefined,
       priorityLevel: searchParams.get("priorityLevel") || undefined,
       aiAssessment: searchParams.get("aiAssessment") || undefined,
+      hasPhotos: (searchParams.get("hasPhotos") as any) || undefined,
+      userRole: searchParams.get("userRole") || (auth.session.role as string) || undefined,
       mode: (searchParams.get("mode") as any) || "cases",
       page: searchParams.get("page") || 1,
       limit: searchParams.get("limit") || 15,

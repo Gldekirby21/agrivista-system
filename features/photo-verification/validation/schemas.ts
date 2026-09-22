@@ -79,6 +79,8 @@ export const QueryVerificationSchema = z.object({
   caseStatus: z.string().trim().optional(),
   priorityLevel: z.string().trim().optional(),
   aiAssessment: z.string().trim().optional(),
+  hasPhotos: z.enum(["true", "false"]).optional(),
+  userRole: z.string().trim().optional(),
   mode: z.enum(["cases", "photos"]).optional().default("cases"),
   page: z.coerce.number().int().positive().optional().default(1),
   limit: z.coerce.number().int().positive().max(100).optional().default(15),

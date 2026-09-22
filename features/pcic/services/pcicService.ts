@@ -36,10 +36,15 @@ function generateReferenceNumbers(): { reportNumber: string; claimNumber: string
 }
 
 /**
- * Re-ranks all active claims in the database and updates ClaimPriorityScore records atomically.
+ * Re-ranks all OMAG_HEAD-approved claims in the database and updates ClaimPriorityScore records atomically.
+ * Only claims with headApprovalStatus === "APPROVED" participate in priority ranking.
+ * BLOCKED, PENDING, and DECLINED claims are excluded.
  */
 export async function syncCohortRankings(tx: any = prisma): Promise<void> {
   const claims = await tx.pcicClaim.findMany({
+    where: {
+      headApprovalStatus: "APPROVED",
+    },
     include: {
       report: {
         include: {
@@ -676,6 +681,11 @@ export async function recalculateAllPriorities(
  */
 export async function getPriorityLeaderboard(limit: number = 20): Promise<any[]> {
   return await prisma.claimPriorityScore.findMany({
+    where: {
+      claim: {
+        headApprovalStatus: "APPROVED",
+      },
+    },
     take: limit,
     orderBy: { rankPosition: "asc" },
     include: {

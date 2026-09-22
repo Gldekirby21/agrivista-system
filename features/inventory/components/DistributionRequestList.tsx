@@ -210,11 +210,16 @@ export const DistributionRequestList: React.FC<DistributionRequestListProps> = (
                         </div>
                       </td>
 
-                      {/* Quantity */}
-                      <td className="py-3 px-4 text-center">
-                        <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
-                          {req.requestedQuantity} {req.unit}
-                        </span>
+                      {/* Quantity & Contribution */}
+                      <td className="py-3 px-4">
+                        <div className="flex flex-col items-center">
+                          <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200">
+                            {req.requestedQuantity} {req.unit}
+                          </span>
+                          <span className="text-[10px] text-purple-700 font-semibold mt-0.5">
+                            Aid Contribution
+                          </span>
+                        </div>
                       </td>
 
                       {/* Status */}
@@ -225,18 +230,37 @@ export const DistributionRequestList: React.FC<DistributionRequestListProps> = (
                             &quot;{req.approvalRemarks}&quot;
                           </div>
                         )}
+                        {/* If distributed or approved, show allocated batch contribution breakdown */}
+                        {req.distributions && req.distributions.length > 0 && (
+                          <div className="mt-1.5 p-1.5 bg-purple-50/60 rounded border border-purple-200/80 text-[10px] text-purple-900 space-y-0.5">
+                            <span className="font-bold flex items-center gap-1 text-[10px] text-purple-800">
+                              <Layers className="h-2.5 w-2.5" /> FIFO Contribution Batches:
+                            </span>
+                            {req.distributions.map((d, i) => (
+                              <div key={d.id || i} className="flex justify-between font-mono text-[9px] text-slate-600">
+                                <span>Batch {d.batch?.batchNumber || d.batchId.slice(0, 8)}</span>
+                                <span className="font-bold text-slate-800">{d.quantityDistributed} {d.unit}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </td>
 
                       {/* Staff & Timestamp */}
                       <td className="py-3 px-4 text-[11px] text-slate-600">
                         <div>Staff: <strong>{req.requestedBy?.fullName || "Staff"}</strong></div>
+                        {req.approvedBy && (
+                          <div className="text-[10px] text-emerald-700 font-medium">
+                            Approved by: {req.approvedBy.fullName}
+                          </div>
+                        )}
                         {req.remarks && (
                           <div className="text-[10px] text-slate-400 truncate max-w-xs" title={req.remarks}>
                             {req.remarks}
                           </div>
                         )}
                         {req.distributedAt && (
-                          <div className="text-[10px] text-emerald-700 font-medium">
+                          <div className="text-[10px] text-blue-700 font-medium">
                             Distributed: {new Date(req.distributedAt).toLocaleDateString()}
                           </div>
                         )}

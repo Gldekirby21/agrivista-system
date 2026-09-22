@@ -45,79 +45,22 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   }
 }
 
-export async function PATCH(req: NextRequest, { params }: RouteParams) {
-  const auth = await requireRole(["OMAG_STAFF"], req);
-  if (!auth.authorized) {
-    return auth.response;
-  }
-
-  const { id } = await params;
-  const numId = parseInt(id, 10);
-  if (isNaN(numId) || numId <= 0) {
-    return NextResponse.json({ error: "Invalid record ID" }, { status: 400 });
-  }
-
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 });
-  }
-
-  const parsed = UpdateHistoricalDataSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.format() },
-      { status: 400 }
-    );
-  }
-
-  try {
-    const updated = await updateHistoricalData(
-      numId,
-      parsed.data,
-      auth.session.id,
-      auth.session.role
-    );
-    return NextResponse.json(updated);
-  } catch (error: any) {
-    console.error(`PATCH /api/resource-demand/historical/${id} error:`, error);
-    const status = error.message.includes("not found") ? 404 : 500;
-    return NextResponse.json(
-      { error: "Failed to update historical record", message: error.message },
-      { status }
-    );
-  }
+export async function PATCH() {
+  return NextResponse.json(
+    {
+      error: "Method Not Allowed",
+      message: "Objective 5 (Historical Crop Yield & Purchase Modeling) is strictly VIEW-ONLY per the approved FDD. Updating historical records is disabled.",
+    },
+    { status: 405 }
+  );
 }
 
-export async function DELETE(req: NextRequest, { params }: RouteParams) {
-  const auth = await requireRole(["OMAG_STAFF"], req);
-  if (!auth.authorized) {
-    return auth.response;
-  }
-
-  const { id } = await params;
-  const numId = parseInt(id, 10);
-  if (isNaN(numId) || numId <= 0) {
-    return NextResponse.json({ error: "Invalid record ID" }, { status: 400 });
-  }
-
-  try {
-    const archived = await archiveHistoricalData(
-      numId,
-      auth.session.id,
-      auth.session.role
-    );
-    return NextResponse.json({
-      message: "Historical record archived successfully",
-      record: archived,
-    });
-  } catch (error: any) {
-    console.error(`DELETE /api/resource-demand/historical/${id} error:`, error);
-    const status = error.message.includes("not found") ? 404 : 500;
-    return NextResponse.json(
-      { error: "Failed to archive historical record", message: error.message },
-      { status }
-    );
-  }
+export async function DELETE() {
+  return NextResponse.json(
+    {
+      error: "Method Not Allowed",
+      message: "Objective 5 (Historical Crop Yield & Purchase Modeling) is strictly VIEW-ONLY per the approved FDD. Deleting or archiving historical records is disabled.",
+    },
+    { status: 405 }
+  );
 }

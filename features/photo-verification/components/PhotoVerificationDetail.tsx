@@ -450,14 +450,7 @@ export const PhotoVerificationDetail: React.FC<PhotoVerificationDetailProps> = (
 
   const handleHeadDecision = async (decisionStatus: "CONFIRMED" | "REJECTED") => {
     if (!activePhoto) return;
-    if (!reviewNotes.trim()) {
-      setMessage({
-        type: "error",
-        text: `Please enter audit notes before ${decisionStatus === "CONFIRMED" ? "approving" : "rejecting"
-          } this verification record.`,
-      });
-      return;
-    }
+    const finalNotes = reviewNotes.trim() || (decisionStatus === "CONFIRMED" ? "Approved by OMAG Head. Verified against cadastral farm parcel." : "Rejected by OMAG Head.");
 
     setSubmittingReview(true);
     setMessage(null);
@@ -467,7 +460,7 @@ export const PhotoVerificationDetail: React.FC<PhotoVerificationDetailProps> = (
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           systemReviewStatus: decisionStatus,
-          systemReviewNotes: reviewNotes.trim(),
+          systemReviewNotes: finalNotes,
         }),
       });
       if (!res.ok) {
@@ -574,19 +567,37 @@ export const PhotoVerificationDetail: React.FC<PhotoVerificationDetailProps> = (
         </Link>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          {getVerificationBadge(record.consolidatedVerificationStatus || activePhoto?.verificationStatus || "PENDING")}
-          {isLinkedToClaim ? (
-            <>
-              {getPriorityBadge(priorityLevel, rankPosition)}
-              <span className="inline-flex items-center px-3 py-1 text-xs font-bold rounded-lg bg-blue-50 text-blue-800 border border-blue-200">
-                Case: {caseStatus}
+          {userRole === "OMAG_HEAD" ? (
+            activePhoto?.systemReviewStatus === "CONFIRMED" ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" /> APPROVED
               </span>
-            </>
+            ) : activePhoto?.systemReviewStatus === "REJECTED" ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-red-100 text-red-900 border border-red-300">
+                <XCircle className="w-4 h-4 text-red-600" /> REJECTED
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-amber-100 text-amber-900 border border-amber-300">
+                <Clock className="w-4 h-4 text-amber-600" /> PENDING
+              </span>
+            )
           ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 border border-slate-300">
-              <Camera className="w-3.5 h-3.5 text-slate-500" />
-              <span>Unlinked Photo Submission</span>
-            </span>
+            <>
+              {getVerificationBadge(record.consolidatedVerificationStatus || activePhoto?.verificationStatus || "PENDING")}
+              {isLinkedToClaim ? (
+                <>
+                  {getPriorityBadge(priorityLevel, rankPosition)}
+                  <span className="inline-flex items-center px-3 py-1 text-xs font-bold rounded-lg bg-blue-50 text-blue-800 border border-blue-200">
+                    Case: {caseStatus}
+                  </span>
+                </>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-slate-100 text-slate-700 border border-slate-300">
+                  <Camera className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Unlinked Photo Submission</span>
+                </span>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -929,43 +940,149 @@ export const PhotoVerificationDetail: React.FC<PhotoVerificationDetailProps> = (
                 <span>Municipal Review &amp; Decision</span>
               </div>
 
-              {userRole === "OMAG_HEAD" ? (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                      Head Review &amp; Audit Notes <span className="text-red-500">*</span>
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={reviewNotes}
-                      onChange={(e) => setReviewNotes(e.target.value)}
-                      placeholder="Enter official Head findings, parcel corroboration, or remarks..."
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
-                      required
-                    />
+              {userRole === "OMAG_HEAD" ? (() => {
+                // Baseline checks required: 3. EXIF Camera Timestamp and 4. Device Hardware Sensor
+                const headGateTimestamp = activePhoto.photoTimestamp !== null && activePhoto.photoTimestamp !== undefined;
+                const headGateDevice = (activePhoto.deviceMake !== null && activePhoto.deviceMake !== undefined) || (activePhoto.deviceModel !== null && activePhoto.deviceModel !== undefined);
+                const theRequiredTwoAreValid = headGateTimestamp && headGateDevice;
+
+                // Rule:
+                // - If 3 and 4 are valid: AI Advisory is required for OMAG Head approval.
+                // - If 3 or 4 is invalid: Cannot review or approve.
+                const headGateAiAdvisory = !!activePhoto.aiAssessment;
+                const headCanReview = theRequiredTwoAreValid && headGateAiAdvisory;
+
+                if (!theRequiredTwoAreValid) {
+                  return (
+                    <div className="space-y-3">
+                      <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 space-y-2">
+                        <p className="text-xs font-bold text-rose-900">
+                          This record cannot be submitted or reviewed by OMAG Head.
+                        </p>
+                        <p className="text-[11px] text-rose-800 leading-relaxed">
+                          The following <span className="font-bold">required camera verification checks</span> are missing or invalid:
+                        </p>
+                        <ul className="text-[11px] text-rose-800 list-disc list-inside space-y-0.5">
+                          {!headGateTimestamp && <li><span className="font-bold">EXIF Camera Timestamp (3)</span> — Photo timestamp metadata not detected.</li>}
+                          {!headGateDevice && <li><span className="font-bold">Device Hardware Sensor (4)</span> — Camera make/model sensor metadata not detected.</li>}
+                        </ul>
+                        <p className="text-[11px] text-rose-800 leading-relaxed">
+                          Both EXIF Camera Timestamp (3) and Device Hardware Sensor (4) must be valid to submit a request to OMAG Head.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (!headGateAiAdvisory) {
+                  return (
+                    <div className="space-y-3">
+                      <div className="p-4 rounded-xl bg-purple-50 border border-purple-200 space-y-2">
+                        <p className="text-xs font-bold text-purple-900">
+                          AI Advisory Required for OMAG Head Approval
+                        </p>
+                        <p className="text-[11px] text-purple-800 leading-relaxed">
+                          Camera timestamp and device sensor checks are valid. AI Advisory Interpretation is required before OMAG Head can finalize review/approval.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleRunAiAssessment}
+                          disabled={assessingAi}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>{assessingAi ? "Evaluating AI Advisory..." : "Run AI Advisory Now"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // If already decided by Head, display the clear decision banner
+                const currentHeadStatus = activePhoto.systemReviewStatus;
+                if (currentHeadStatus === "CONFIRMED") {
+                  return (
+                    <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
+                      <div className="flex items-center gap-2 text-emerald-900 font-bold text-xs">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                        <span>Officially Approved by OMAG Head</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-800 leading-relaxed">
+                        This photograph and crop-loss case are verified and approved. It is now active in the <strong>Crop Yield and Loss Prediction</strong> dropdown and PCIC priority rankings.
+                      </p>
+                      {activePhoto.systemReviewNotes && (
+                        <div className="text-[10px] text-emerald-900 bg-white/70 p-2.5 rounded-lg border border-emerald-200 mt-1 font-mono">
+                          <strong>Head Audit Remarks:</strong> {activePhoto.systemReviewNotes}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                if (currentHeadStatus === "REJECTED") {
+                  return (
+                    <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 space-y-2">
+                      <div className="flex items-center gap-2 text-rose-900 font-bold text-xs">
+                        <XCircle className="w-4 h-4 text-rose-600" />
+                        <span>Officially Rejected by OMAG Head</span>
+                      </div>
+                      <p className="text-[11px] text-rose-800 leading-relaxed">
+                        This verification record was rejected. It is closed and strictly excluded from Crop Yield and Loss Prediction.
+                      </p>
+                      {activePhoto.systemReviewNotes && (
+                        <div className="text-[10px] text-rose-900 bg-white/70 p-2.5 rounded-lg border border-rose-200 mt-1 font-mono">
+                          <strong>Head Rejection Remarks:</strong> {activePhoto.systemReviewNotes}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-900 space-y-1">
+                      <strong className="block font-bold">OMAG Head Review &amp; Approval Action</strong>
+                      <p className="text-[11px] text-blue-800 leading-relaxed">
+                        Please review the 3 verified baseline checks and the AI Advisory findings. Approving will unlock this case for Crop Yield &amp; Loss Prediction.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                        Head Review Notes <span className="text-slate-400 font-normal text-[10px]">(Optional or customized)</span>
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={reviewNotes}
+                        onChange={(e) => setReviewNotes(e.target.value)}
+                        placeholder="e.g. Ground truth and AI advisory findings corroborated against cadastral records."
+                        className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 font-normal"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => handleHeadDecision("REJECTED")}
+                        disabled={submittingReview}
+                        className="w-full py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        <span>{submittingReview ? "Submitting..." : "Reject Photo"}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleHeadDecision("CONFIRMED")}
+                        disabled={submittingReview}
+                        className="w-full py-2.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>{submittingReview ? "Submitting..." : "Approve Photo"}</span>
+                      </button>
+                    </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-2.5 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleHeadDecision("REJECTED")}
-                      disabled={submittingReview}
-                      className="w-full py-2.5 px-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      <span>Reject Photo</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleHeadDecision("CONFIRMED")}
-                      disabled={submittingReview}
-                      className="w-full py-2.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Approve Photo</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
+                );
+              })() : (
                 <div className="space-y-2 text-xs">
                   <span className="font-bold text-slate-700 block">Recorded System Review:</span>
                   <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
@@ -1010,7 +1127,9 @@ export const PhotoVerificationDetail: React.FC<PhotoVerificationDetailProps> = (
                   </thead>
                   <tbody className="divide-y divide-slate-100 bg-white">
                     <tr>
-                      <td className="py-2.5 px-3 font-semibold text-slate-800">1. Embedded GPS</td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-800">
+                        1. GPS Location Embedded
+                      </td>
                       <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">
                         {activePhoto.photoLatitude && activePhoto.photoLongitude
                           ? `${activePhoto.photoLatitude.toFixed(6)}, ${activePhoto.photoLongitude.toFixed(6)}`
@@ -1019,36 +1138,46 @@ export const PhotoVerificationDetail: React.FC<PhotoVerificationDetailProps> = (
                       <td className="py-2.5 px-3 text-right font-bold">
                         {activePhoto.photoLatitude && activePhoto.photoLongitude ? (
                           <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
-                            PRESENT
+                            RECORDED
                           </span>
                         ) : (
-                          <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
-                            MISSING
+                          <span className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[10px]">
+                            UNAVAILABLE
                           </span>
                         )}
                       </td>
                     </tr>
                     <tr>
-                      <td className="py-2.5 px-3 font-semibold text-slate-800">2. Haversine Distance</td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-800">
+                        2. Great-Circle Geofence <span className="text-[10px] font-bold text-emerald-700 font-mono">(REQUIRED)</span>
+                      </td>
                       <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px]">
                         {activePhoto.calculatedDistanceMeters !== null
                           ? `${activePhoto.calculatedDistanceMeters.toFixed(1)}m from parcel (Tolerance: ${activePhoto.thresholdMeters}m)`
                           : "Cannot evaluate distance"}
                       </td>
                       <td className="py-2.5 px-3 text-right font-bold">
-                        {activePhoto.verificationStatus === "ACCEPTED" ? (
-                          <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
-                            WITHIN TOLERANCE
-                          </span>
+                        {activePhoto.calculatedDistanceMeters !== null ? (
+                          activePhoto.verificationStatus === "ACCEPTED" ? (
+                            <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+                              WITHIN TOLERANCE
+                            </span>
+                          ) : (
+                            <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
+                              EXCEEDS TOLERANCE
+                            </span>
+                          )
                         ) : (
                           <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
-                            EXCEEDS TOLERANCE
+                            UNAVAILABLE
                           </span>
                         )}
                       </td>
                     </tr>
                     <tr>
-                      <td className="py-2.5 px-3 font-semibold text-slate-800">3. Camera Timestamp</td>
+                      <td className="py-2.5 px-3 font-semibold text-slate-800">
+                        3. EXIF Camera Timestamp <span className="text-[10px] font-bold text-emerald-700 font-mono">(REQUIRED)</span>
+                      </td>
                       <td className="py-2.5 px-3 text-slate-600 text-[11px]" suppressHydrationWarning>
                         {activePhoto.photoTimestamp
                           ? new Date(activePhoto.photoTimestamp).toLocaleString()
@@ -1060,8 +1189,48 @@ export const PhotoVerificationDetail: React.FC<PhotoVerificationDetailProps> = (
                             AUTHENTIC
                           </span>
                         ) : (
-                          <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[10px]">
+                          <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
                             MISSING
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 px-3 font-semibold text-slate-800">
+                        4. Device Hardware Sensor <span className="text-[10px] font-bold text-emerald-700 font-mono">(REQUIRED)</span>
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 text-[11px]">
+                        {[activePhoto.deviceMake, activePhoto.deviceModel].filter(Boolean).join(" ") || "Unspecified Hardware"}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold">
+                        {activePhoto.deviceMake || activePhoto.deviceModel ? (
+                          <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+                            RECORDED
+                          </span>
+                        ) : (
+                          <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
+                            MISSING
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="py-2.5 px-3 font-semibold text-slate-800">
+                        5. AI Advisory Interpretation <span className="text-[10px] font-bold text-purple-700 font-mono">(REQUIRED FOR HEAD REVIEW)</span>
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 text-[11px]">
+                        {activePhoto.aiAssessment
+                          ? `${activePhoto.aiAssessment} (${activePhoto.aiRecommendation || "N/A"})`
+                          : "Not evaluated yet"}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold">
+                        {activePhoto.aiAssessment ? (
+                          <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+                            EVALUATED
+                          </span>
+                        ) : (
+                          <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
+                            NOT EVALUATED
                           </span>
                         )}
                       </td>
@@ -1086,9 +1255,22 @@ export const PhotoVerificationDetail: React.FC<PhotoVerificationDetailProps> = (
                   <Sparkles className="w-5 h-5 text-purple-600" />
                   <span>5. AI Advisory Interpretation</span>
                 </div>
-                <span className="text-[10px] font-bold font-mono text-purple-800 bg-purple-50 px-2.5 py-1 rounded-md border border-purple-200">
-                  AI-Assisted Advisory — Non-Authoritative
-                </span>
+                <div className="flex items-center gap-2">
+                  {activePhoto.aiAssessment && (
+                    <button
+                      type="button"
+                      onClick={handleRunAiAssessment}
+                      disabled={assessingAi}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-100 hover:bg-purple-200 text-purple-800 text-[11px] font-bold border border-purple-300 transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>{assessingAi ? "Re-assessing..." : "Re-run AI Advisory"}</span>
+                    </button>
+                  )}
+                  <span className="text-[10px] font-bold font-mono text-purple-800 bg-purple-50 px-2.5 py-1 rounded-md border border-purple-200">
+                    AI-Assisted Advisory — Non-Authoritative
+                  </span>
+                </div>
               </div>
 
               {/* Conflict Guard Notice if triggered */}
@@ -1145,12 +1327,25 @@ export const PhotoVerificationDetail: React.FC<PhotoVerificationDetailProps> = (
                   </div>
                 </div>
               ) : (
-                <div className="p-6 text-center text-slate-500 space-y-2 border border-dashed border-purple-200 rounded-xl bg-purple-50/20 text-xs">
+                <div className="p-6 text-center text-slate-500 space-y-3 border border-dashed border-purple-200 rounded-xl bg-purple-50/20 text-xs">
                   <Sparkles className="w-8 h-8 text-purple-400 mx-auto" />
-                  <p className="font-bold text-slate-700">AI Advisory has not been evaluated for this photo</p>
-                  <p className="text-[11px] text-slate-500">
-                    Click &quot;Run AI Advisory&quot; to interpret telemetry using Gemini advisory intelligence.
-                  </p>
+                  <div>
+                    <p className="font-bold text-slate-700">AI Advisory has not been evaluated for this photo</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      AI Advisory is required before this record can be submitted for OMAG Head review.
+                    </p>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={handleRunAiAssessment}
+                      disabled={assessingAi}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      <span>{assessingAi ? "Evaluating AI Advisory..." : "Run AI Advisory"}</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1282,38 +1477,6 @@ export const PhotoVerificationDetail: React.FC<PhotoVerificationDetailProps> = (
           )}
         </div>
       )}
-
-      {/* SECTION 9: IMMUTABLE AUDIT HISTORY - Consolidated to Activity / Audit Logs */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 shadow-xs">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
-          <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-900">
-            <History className="w-5 h-5 text-emerald-700" />
-            <span>8. Activity &amp; Audit Trail Ledger</span>
-          </div>
-          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded border border-emerald-200 uppercase tracking-wider">
-            {record.auditLogs?.length || 0} Registered Events
-          </span>
-        </div>
-
-        <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-800">
-              Audit records for this case, linked photos, and field reviews are consolidated in the central ledger.
-            </p>
-            <p className="text-[11px] text-slate-500">
-              Full state transitions, EXIF verification events, and officer reviews are tracked with tamper-evident cryptographic logs.
-            </p>
-          </div>
-
-          <Link
-            href={`${userRole === "OMAG_HEAD" ? "/head" : "/staff"}/audit?module=PHOTO_VERIFICATION&recordId=${record.id}`}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold shadow-xs transition-colors shrink-0 self-start md:self-auto"
-          >
-            <span>View in Activity / Audit Logs</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-      </div>
 
       {/* Lightbox / High-Resolution Zoom Modal */}
       {isLightboxOpen && activePhoto && (

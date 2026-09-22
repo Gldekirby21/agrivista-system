@@ -389,7 +389,12 @@ export async function runAiAssessmentForRecord(
 }
 
 /**
- * Submits municipal system review note (System Action, not PCIC approval)
+ * Submits municipal system review note and cascades Head decision to linked PcicClaim.
+ * 
+ * When OMAG_HEAD sets systemReviewStatus to CONFIRMED or REJECTED, the decision
+ * is cascaded to the linked PcicClaim.headApprovalStatus (if one exists) so that
+ * all downstream eligibility gates (prediction, priority ranking, claim monitoring)
+ * are automatically enforced.
  */
 export async function submitSystemReview(
   id: string,
@@ -397,7 +402,16 @@ export async function submitSystemReview(
   userId?: string,
   roleSnapshot?: string
 ) {
-  const existing = await prisma.photoVerification.findUnique({ where: { id } });
+  const existing = await prisma.photoVerification.findUnique({
+    where: { id },
+    include: {
+      damageReport: {
+        include: {
+          pcicClaim: true,
+        },
+      },
+    },
+  });
   if (!existing) {
     throw new Error(`Photo verification record '${id}' not found.`);
   }
@@ -431,6 +445,56 @@ export async function submitSystemReview(
       systemReviewNotes: updated.systemReviewNotes,
     },
   });
+
+  // =========================================================================
+  // CASCADE HEAD DECISION TO LINKED PCIC CLAIM
+  // =========================================================================
+  // When OMAG_HEAD approves (CONFIRMED) or declines (REJECTED) a photo
+  // verification record, cascade the decision to the linked PcicClaim so that
+  // downstream eligibility gates (prediction, priority ranking, claim monitoring)
+  // are automatically enforced via PcicClaim.headApprovalStatus.
+  // =========================================================================
+  const linkedClaim = existing.damageReport?.pcicClaim;
+  if (linkedClaim && (input.systemReviewStatus === "CONFIRMED" || input.systemReviewStatus === "REJECTED")) {
+    const cascadedApprovalStatus =
+      input.systemReviewStatus === "CONFIRMED" ? "APPROVED" : "REJECTED";
+
+    const previousClaimStatus = linkedClaim.headApprovalStatus;
+
+    await prisma.pcicClaim.update({
+      where: { id: linkedClaim.id },
+      data: {
+        headApprovalStatus: cascadedApprovalStatus,
+        headApprovedById: userId || null,
+        headApprovedAt: new Date(),
+        headApprovalRemarks: input.systemReviewNotes || null,
+      },
+    });
+
+    await logAuditEvent({
+      userId,
+      roleSnapshot,
+      action: cascadedApprovalStatus === "APPROVED"
+        ? "HEAD_PHOTO_APPROVED"
+        : "HEAD_PHOTO_DECLINED",
+      module: "PCIC_CLAIM",
+      recordId: linkedClaim.id,
+      previousValues: {
+        headApprovalStatus: previousClaimStatus,
+        source: "PHOTO_VERIFICATION_CASCADE",
+        photoVerificationId: id,
+      },
+      newValues: {
+        headApprovalStatus: cascadedApprovalStatus,
+        headApprovedById: userId,
+        headApprovedAt: new Date().toISOString(),
+        headApprovalRemarks: input.systemReviewNotes || null,
+        claimNumber: linkedClaim.claimNumber,
+        source: "PHOTO_VERIFICATION_CASCADE",
+        photoVerificationId: id,
+      },
+    });
+  }
 
   return updated;
 }
@@ -668,6 +732,16 @@ export async function getCropLossCaseVerifications(params: Partial<QueryVerifica
 
   const whereClause: Prisma.DamageReportWhereInput = {};
 
+  // For OMAG Head oversight or when explicitly requested:
+  // Strictly only show cases that HAVE photos AND do not show NOT_ACCEPTED cases
+  if (params.userRole === "OMAG_HEAD" || params.hasPhotos === "true") {
+    whereClause.photoVerifications = {
+      some: {
+        verificationStatus: params.userRole === "OMAG_HEAD" ? { not: "NOT_ACCEPTED" } : undefined,
+      },
+    };
+  }
+
   if (params.barangay && params.barangay !== "ALL") {
     whereClause.farmer = {
       barangay: { equals: params.barangay, mode: "insensitive" },
@@ -811,17 +885,24 @@ export async function getCropLossCaseVerifications(params: Partial<QueryVerifica
     });
 
     // If verificationStatus filter is applied, filter on the aggregated status
-    const filteredItems = params.status && params.status !== "ALL"
+    let filteredItems = params.status && params.status !== "ALL"
       ? mappedItems.filter((i) => i.consolidatedVerificationStatus.toUpperCase() === params.status!.toUpperCase())
       : mappedItems;
+
+    // For OMAG_HEAD oversight, strictly exclude NOT_ACCEPTED records and 0-photo records
+    if (params.userRole === "OMAG_HEAD") {
+      filteredItems = filteredItems.filter(
+        (i) => i.photoCount > 0 && i.consolidatedVerificationStatus !== "NOT_ACCEPTED"
+      );
+    }
 
     return {
       items: filteredItems,
       pagination: {
         page,
         limit,
-        total: params.status && params.status !== "ALL" ? filteredItems.length : total,
-        totalPages: Math.ceil((params.status && params.status !== "ALL" ? filteredItems.length : total) / limit) || 1,
+        total: filteredItems.length,
+        totalPages: Math.ceil(filteredItems.length / limit) || 1,
       },
     };
   });

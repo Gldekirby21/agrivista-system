@@ -81,6 +81,10 @@ export function verifyPhotoMetadata(
   const timestampAvailable = timestamp !== null && timestamp instanceof Date && !isNaN(timestamp.getTime());
 
   // Check 1: Missing Photo GPS
+  // GPS Location Embedded is OPTIONAL per OMAG Polomolok verification rules.
+  // Missing GPS alone must NOT produce NOT_ACCEPTED — the record moves to REVIEW
+  // since the Great-Circle Geofence (a REQUIRED check) cannot be computed without GPS,
+  // but the record is not definitively rejected.
   if (!gpsAvailable) {
     const timestampStatus: TimestampStatusType = timestampAvailable ? "VALID" : "TIMESTAMP_MISSING";
     return {
@@ -96,10 +100,10 @@ export function verifyPhotoMetadata(
       thresholdMeters,
       gpsStatus: "GPS_MISSING",
       timestampStatus,
-      deterministicStatus: "NOT_ACCEPTED",
-      failureReasonCode: "ERR_PHOTO_GPS_MISSING",
+      deterministicStatus: "REVIEW",
+      failureReasonCode: "WARN_PHOTO_GPS_MISSING",
       verificationNotes:
-        "GPS metadata unavailable; embedded GPS information cannot be independently verified.",
+        "GPS metadata unavailable. Great-Circle Geofence cannot be computed. Ground verification may be required.",
     };
   }
 

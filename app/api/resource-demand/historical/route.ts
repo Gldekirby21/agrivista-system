@@ -51,40 +51,12 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
-  // Historical Crop Yield & Purchase Modeling is exclusive to OMAG_HEAD
-  const auth = await requireRole(["OMAG_HEAD"], req);
-  if (!auth.authorized) {
-    return auth.response;
-  }
-
-  let body: any;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON request body" }, { status: 400 });
-  }
-
-  const parsed = CreateHistoricalDataSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", details: parsed.error.format() },
-      { status: 400 }
-    );
-  }
-
-  try {
-    const record = await createHistoricalData(
-      parsed.data,
-      auth.session.id,
-      auth.session.role
-    );
-    return NextResponse.json(record, { status: 201 });
-  } catch (error: any) {
-    console.error("POST /api/resource-demand/historical error:", error);
-    return NextResponse.json(
-      { error: "Failed to create historical record", message: error.message },
-      { status: 500 }
-    );
-  }
+export async function POST() {
+  return NextResponse.json(
+    {
+      error: "Method Not Allowed",
+      message: "Objective 5 (Historical Crop Yield & Purchase Modeling) is strictly VIEW-ONLY per the approved FDD. Historical data creation is disabled.",
+    },
+    { status: 405 }
+  );
 }

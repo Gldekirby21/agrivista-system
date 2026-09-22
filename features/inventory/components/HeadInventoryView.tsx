@@ -301,17 +301,6 @@ function HeadInventoryContent() {
               </span>
             )}
           </button>
-          <button
-            onClick={() => setActiveTab("simulator")}
-            className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              activeTab === "simulator"
-                ? "bg-white text-slate-900 shadow-xs"
-                : "text-slate-600 hover:text-slate-900"
-            }`}
-          >
-            <Boxes className="w-3.5 h-3.5 text-amber-600" />
-            FIFO Queue Simulator
-          </button>
         </div>
 
         <button
@@ -367,8 +356,6 @@ function HeadInventoryContent() {
           userRole="OMAG_HEAD"
         />
       )}
-
-      {activeTab === "simulator" && <FifoAllocationPreview />}
     </div>
   );
 }

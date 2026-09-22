@@ -1,7 +1,6 @@
-import React from "react";
 import { Header } from "@/components/layout/header/Header";
-import { BeneficiaryIntakeForm } from "@/features/rsbsa/components/BeneficiaryIntakeForm";
 import { requireRole } from "@/lib/auth/session";
+import { BeneficiaryIntakeForm } from "@/features/rsbsa/components/BeneficiaryIntakeForm";
 
 export const dynamic = "force-dynamic";
 

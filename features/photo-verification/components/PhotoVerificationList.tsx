@@ -117,6 +117,7 @@ export const PhotoVerificationList: React.FC<PhotoVerificationListProps> = ({
       if (cs && cs !== "ALL") params.set("caseStatus", cs);
       if (p && p !== "ALL") params.set("priorityLevel", p);
       if (vs && vs !== "ALL") params.set("status", vs);
+      if (userRole === "OMAG_HEAD") params.set("userRole", "OMAG_HEAD");
 
       const res = await fetch(`/api/photo-verification?${params.toString()}`);
       if (res.ok) {
@@ -186,6 +187,28 @@ export const PhotoVerificationList: React.FC<PhotoVerificationListProps> = ({
   }, [items]);
 
   const getVerificationBadge = (status: string) => {
+    if (userRole === "OMAG_HEAD") {
+      if (status === "ACCEPTED") {
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> ACCEPTED
+          </span>
+        );
+      }
+      if (status === "REJECTED") {
+        return (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg bg-red-100 text-red-900 border border-red-300">
+            <XCircle className="w-3.5 h-3.5 text-red-600" /> REJECTED
+          </span>
+        );
+      }
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-100 text-amber-900 border border-amber-300">
+          <Clock className="w-3.5 h-3.5 text-amber-600" /> PENDING
+        </span>
+      );
+    }
+
     switch (status) {
       case "ACCEPTED":
         return (
@@ -252,6 +275,21 @@ export const PhotoVerificationList: React.FC<PhotoVerificationListProps> = ({
   };
 
   const getCaseStatusBadge = (status: string) => {
+    if (userRole === "OMAG_HEAD") {
+      if (status === "SETTLED" || status === "COORDINATED_WITH_PCIC") {
+        return (
+          <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+            {status.replace(/_/g, " ")}
+          </span>
+        );
+      }
+      return (
+        <span className="px-2 py-0.5 text-[11px] font-bold rounded-md bg-amber-50 text-amber-800 border border-amber-300">
+          PENDING
+        </span>
+      );
+    }
+
     switch (status) {
       case "UNLINKED":
         return (
@@ -328,23 +366,25 @@ export const PhotoVerificationList: React.FC<PhotoVerificationListProps> = ({
 
           <div className="flex items-center gap-2 self-start md:self-auto shrink-0">
             {userRole === "OMAG_STAFF" && (
-              <button
-                type="button"
-                onClick={() => setIsUploadModalOpen(true)}
-                className="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-semibold text-xs shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer"
-              >
-                <Camera className="h-4 w-4 text-emerald-600" />
-                <span>Upload Field Photo</span>
-              </button>
-            )}
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsUploadModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-800 font-semibold text-xs shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Camera className="h-4 w-4 text-emerald-600" />
+                  <span>Upload Field Photo</span>
+                </button>
 
-            <Link
-              href={`${basePath}/new`}
-              className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer shrink-0"
-            >
-              <Sparkles className="h-4 w-4 text-emerald-200" />
-              <span>New Photo Verification Intake</span>
-            </Link>
+                <Link
+                  href={`${basePath}/new`}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer shrink-0"
+                >
+                  <Sparkles className="h-4 w-4 text-emerald-200" />
+                  <span>New Photo Verification Intake</span>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -420,19 +460,21 @@ export const PhotoVerificationList: React.FC<PhotoVerificationListProps> = ({
             ))}
           </select>
 
-          {/* Case Status Filter */}
-          <select
-            value={caseStatusFilter}
-            onChange={handleCaseStatusChange}
-            className="text-xs border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-medium cursor-pointer"
-          >
-            <option value="ALL">All Case Statuses</option>
-            {CASE_STATUSES.filter((s) => s !== "ALL").map((s) => (
-              <option key={s} value={s}>
-                Status: {s.replace(/_/g, " ")}
-              </option>
-            ))}
-          </select>
+          {/* Case Status Filter (Staff only) */}
+          {userRole !== "OMAG_HEAD" && (
+            <select
+              value={caseStatusFilter}
+              onChange={handleCaseStatusChange}
+              className="text-xs border border-slate-200 rounded-xl px-2.5 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-medium cursor-pointer"
+            >
+              <option value="ALL">All Case Statuses</option>
+              {CASE_STATUSES.filter((s) => s !== "ALL").map((s) => (
+                <option key={s} value={s}>
+                  Status: {s.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
+          )}
 
           {/* Priority Level Filter */}
           <select
@@ -458,7 +500,9 @@ export const PhotoVerificationList: React.FC<PhotoVerificationListProps> = ({
             <option value="ACCEPTED">ACCEPTED (All Photos Valid)</option>
             <option value="REVIEW">REVIEW (Photo Requires Review)</option>
             <option value="REJECTED">REJECTED (Outside Tolerance)</option>
-            <option value="NOT_ACCEPTED">NOT ACCEPTED (Missing GPS)</option>
+            {userRole !== "OMAG_HEAD" && (
+              <option value="NOT_ACCEPTED">NOT ACCEPTED (Missing GPS)</option>
+            )}
             <option value="PENDING">PENDING</option>
           </select>
         </div>
@@ -501,7 +545,7 @@ export const PhotoVerificationList: React.FC<PhotoVerificationListProps> = ({
                   <th className="py-3 px-4 text-center">Damage %</th>
                   <th className="py-3 px-4 text-center">Photos</th>
                   <th className="py-3 px-4">Verification</th>
-                  <th className="py-3 px-4">Case Status</th>
+                  {userRole !== "OMAG_HEAD" && <th className="py-3 px-4">Case Status</th>}
                   <th className="py-3 px-4 text-center">Action</th>
                 </tr>
               </thead>
@@ -552,12 +596,12 @@ export const PhotoVerificationList: React.FC<PhotoVerificationListProps> = ({
                       </div>
                     </td>
 
-                    {/* 4. Damage % (Reported & Assessed) */}
+                    {/* 4. Damage % (Reported & Assessed for staff, reported only for OMAG Head) */}
                     <td className="py-3.5 px-4 text-center">
                       <span className="font-mono font-bold text-xs text-slate-900">
                         {item.reportedDamagePercent}%
                       </span>
-                      {item.assessedDamagePercent !== null && (
+                      {userRole !== "OMAG_HEAD" && item.assessedDamagePercent !== null && (
                         <span className="block text-[10px] text-emerald-700 font-medium">
                           Assessed: {item.assessedDamagePercent}%
                         </span>
@@ -609,15 +653,42 @@ export const PhotoVerificationList: React.FC<PhotoVerificationListProps> = ({
                       </div>
                     </td>
 
-                    {/* 6. Consolidated Verification Status */}
+                    {/* 6. Consolidated Verification Status / Head Decision Status */}
                     <td className="py-3.5 px-4">
-                      {getVerificationBadge(item.consolidatedVerificationStatus)}
+                      {(() => {
+                        if (userRole === "OMAG_HEAD") {
+                          const isHeadApproved = item.photos?.some((p) => p.systemReviewStatus === "CONFIRMED");
+                          const isHeadRejected = item.photos?.some((p) => p.systemReviewStatus === "REJECTED");
+                          if (isHeadApproved) {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> APPROVED
+                              </span>
+                            );
+                          }
+                          if (isHeadRejected) {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg bg-red-100 text-red-900 border border-red-300">
+                                <XCircle className="w-3.5 h-3.5 text-red-600" /> REJECTED
+                              </span>
+                            );
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-100 text-amber-900 border border-amber-300">
+                              <Clock className="w-3.5 h-3.5 text-amber-600" /> PENDING
+                            </span>
+                          );
+                        }
+                        return getVerificationBadge(item.consolidatedVerificationStatus);
+                      })()}
                     </td>
 
-                    {/* 7. Case Status */}
-                    <td className="py-3.5 px-4">
-                      {getCaseStatusBadge(item.caseStatus)}
-                    </td>
+                    {/* 7. Case Status (Staff only; excluded for OMAG Head) */}
+                    {userRole !== "OMAG_HEAD" && (
+                      <td className="py-3.5 px-4">
+                        {getCaseStatusBadge(item.caseStatus)}
+                      </td>
+                    )}
 
                     {/* 9. Action: View Details + Upload Photo */}
                     <td className="py-3.5 px-4 text-center">

@@ -81,13 +81,13 @@ function StaffRankingContent() {
   const [leaderboardItems, setLeaderboardItems] = useState<LeaderboardItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [totalClaims, setTotalClaims] = useState<number>(0);
+  const [mounted, setMounted] = useState<boolean>(false);
 
   // Distribution requests states
   const [requests, setRequests] = useState<DistributionRequestDTO[]>([]);
   const [loadingRequests, setLoadingRequests] = useState<boolean>(false);
 
-  // View & Filtering states in Unified Ranking View
-  const [viewMode, setViewMode] = useState<"barangay" | "leaderboard">("barangay");
+  // Filtering & expansion states in Barangay Ranking View
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("ALL");
   const [expandedBarangays, setExpandedBarangays] = useState<Record<string, boolean>>({});
@@ -100,6 +100,10 @@ function StaffRankingContent() {
   // Distribution request modal state
   const [isDistModalOpen, setIsDistModalOpen] = useState<boolean>(false);
   const [selectedBarangayForDist, setSelectedBarangayForDist] = useState<string>("");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const fetchLeaderboard = async () => {
     setLoading(true);
@@ -150,12 +154,31 @@ function StaffRankingContent() {
     fetchRequests();
   }, []);
 
-  // Compute unified barangay stats with aggregated claims
+  // Track approved or distributed barangays (requests approved by OMAG Head or FIFO completed)
+  const servicedBarangaysMap = useMemo(() => {
+    const map = new Map<string, DistributionRequestDTO[]>();
+    requests.forEach((r) => {
+      if (r.status === "APPROVED" || r.status === "DISTRIBUTED") {
+        const key = r.barangay.trim().toLowerCase();
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(r);
+      }
+    });
+    return map;
+  }, [requests]);
+
+  // Compute unified barangay stats with aggregated claims (Active unserviced queue)
   const barangaySummary: BarangayStat[] = useMemo(() => {
     const map = new Map<string, BarangayStat>();
 
     leaderboardItems.forEach((item) => {
       const brgy = item.claim?.report?.farmer?.barangay || "Unassigned";
+
+      // If the barangay has already been approved or distributed by OMAG Head, exclude from active priority ranking
+      if (servicedBarangaysMap.has(brgy.trim().toLowerCase())) {
+        return;
+      }
+
       if (!map.has(brgy)) {
         map.set(brgy, {
           barangay: brgy,
@@ -198,7 +221,10 @@ function StaffRankingContent() {
       if (b.avgDamage !== a.avgDamage) return b.avgDamage - a.avgDamage;
       return b.total - a.total;
     });
-  }, [leaderboardItems]);
+  }, [leaderboardItems, servicedBarangaysMap]);
+
+  // Total serviced barangays count
+  const servicedBarangaysCount = servicedBarangaysMap.size;
 
   // Filtered Barangays based on search query and priority filter
   const filteredBarangays = useMemo(() => {
@@ -228,29 +254,6 @@ function StaffRankingContent() {
       });
     });
   }, [barangaySummary, searchQuery, priorityFilter]);
-
-  // Filtered Flat Claims for Leaderboard mode
-  const filteredClaims = useMemo(() => {
-    return leaderboardItems.filter((item) => {
-      if (priorityFilter !== "ALL" && item.priorityLevel !== priorityFilter) {
-        return false;
-      }
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase().trim();
-      const brgy = item.claim?.report?.farmer?.barangay?.toLowerCase() || "";
-      const farmerName = `${item.claim?.report?.farmer?.firstName} ${item.claim?.report?.farmer?.lastName}`.toLowerCase();
-      const claimNum = item.claim?.claimNumber?.toLowerCase() || "";
-      const crop = item.claim?.report?.crop?.cropType?.toLowerCase() || "";
-      const calamity = item.claim?.report?.calamityType?.toLowerCase() || "";
-      return (
-        brgy.includes(q) ||
-        farmerName.includes(q) ||
-        claimNum.includes(q) ||
-        crop.includes(q) ||
-        calamity.includes(q)
-      );
-    });
-  }, [leaderboardItems, searchQuery, priorityFilter]);
 
   // Expand / Collapse Helpers
   const toggleBarangay = (brgy: string) => {
@@ -285,9 +288,18 @@ function StaffRankingContent() {
   const totalAvgMunicipalDamage =
     barangaySummary.length > 0
       ? Math.round(
-          barangaySummary.reduce((acc, curr) => acc + curr.avgDamage, 0) / barangaySummary.length
-        )
+        barangaySummary.reduce((acc, curr) => acc + curr.avgDamage, 0) / barangaySummary.length
+      )
       : 0;
+
+  if (!mounted) {
+    return (
+      <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+        <div className="h-6 w-6 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+        <span className="text-xs font-semibold">Loading Priority Ranking...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 text-xs">
@@ -308,24 +320,6 @@ function StaffRankingContent() {
               Unified barangay crop-loss ranking and aid distribution hub. Review ranked damage cohorts, inspect individual farmer dossiers, and trigger FIFO distribution requisitions.
             </p>
           </div>
-
-          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-            <button
-              onClick={() => setIsCreateOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-emerald-700 text-white font-semibold hover:bg-emerald-800 transition-colors shadow-xs cursor-pointer"
-            >
-              <Plus className="h-4 w-4 stroke-[2.5]" />
-              <span>Open New Claim Case</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Operational Guidance Notice */}
-        <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-[11px] flex items-start gap-2 leading-relaxed">
-          <ShieldAlert className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
-          <div>
-            <span className="font-bold">Operational Guidance:</span> Priority ranking aggregates crop-loss severity per barangay to inform aid allocation. It does <strong>NOT</strong> automatically deduct supplies. Staff specifies requisition quantities via the <strong>[ Distribution ]</strong> action, which requires Municipal Head approval prior to deterministic FIFO release.
-          </div>
         </div>
       </div>
 
@@ -333,11 +327,10 @@ function StaffRankingContent() {
       <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
         <button
           onClick={() => setActiveTab("ranking")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
-            activeTab === "ranking"
-              ? "bg-slate-900 text-white shadow-xs"
-              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-          }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer ${activeTab === "ranking"
+            ? "bg-slate-900 text-white shadow-xs"
+            : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
         >
           <BarChart3 className="h-4 w-4" />
           <span>Barangay Priority &amp; Claim Ranking</span>
@@ -348,11 +341,10 @@ function StaffRankingContent() {
 
         <button
           onClick={() => setActiveTab("requests")}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer ${
-            activeTab === "requests"
-              ? "bg-slate-900 text-white shadow-xs"
-              : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-          }`}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer ${activeTab === "requests"
+            ? "bg-slate-900 text-white shadow-xs"
+            : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
         >
           <Package className="h-4 w-4" />
           <span>Distribution Requests &amp; FIFO Execution</span>
@@ -371,61 +363,6 @@ function StaffRankingContent() {
 
       {activeTab === "ranking" ? (
         <div className="space-y-4">
-          {/* Executive KPI Cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[11px] font-semibold uppercase tracking-wider">Affected Barangays</span>
-                <MapPin className="h-4 w-4 text-emerald-600" />
-              </div>
-              <div className="mt-1.5 flex items-baseline gap-2">
-                <span className="text-xl font-bold font-mono text-slate-900">
-                  {barangaySummary.length}
-                </span>
-                <span className="text-[11px] text-slate-500">of 23 in Polomolok</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[11px] font-semibold uppercase tracking-wider">Total Ranked Claims</span>
-                <Layers className="h-4 w-4 text-blue-600" />
-              </div>
-              <div className="mt-1.5 flex items-baseline gap-2">
-                <span className="text-xl font-bold font-mono text-slate-900">
-                  {totalClaims}
-                </span>
-                <span className="text-[11px] text-slate-500">crop damage files</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[11px] font-semibold uppercase tracking-wider">High Urgency Areas</span>
-                <AlertTriangle className="h-4 w-4 text-red-600" />
-              </div>
-              <div className="mt-1.5 flex items-baseline gap-2">
-                <span className="text-xl font-bold font-mono text-red-600">
-                  {highPriorityBarangaysCount}
-                </span>
-                <span className="text-[11px] text-slate-500">critical barangays</span>
-              </div>
-            </div>
-
-            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
-              <div className="flex items-center justify-between text-slate-400">
-                <span className="text-[11px] font-semibold uppercase tracking-wider">Avg Municipal Loss</span>
-                <Activity className="h-4 w-4 text-purple-600" />
-              </div>
-              <div className="mt-1.5 flex items-baseline gap-2">
-                <span className="text-xl font-bold font-mono text-slate-900">
-                  {totalAvgMunicipalDamage}%
-                </span>
-                <span className="text-[11px] text-slate-500">assessed severity</span>
-              </div>
-            </div>
-          </div>
-
           {/* Unified Controls & Filter Bar */}
           <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3">
             {/* Search Input */}
@@ -457,51 +394,23 @@ function StaffRankingContent() {
                 </select>
               </div>
 
-              {/* View Mode Toggle */}
-              <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              {/* Expand/Collapse All */}
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => setViewMode("barangay")}
-                  className={`px-3 py-1 rounded-md font-semibold text-[11px] transition-colors cursor-pointer ${
-                    viewMode === "barangay"
-                      ? "bg-white text-slate-900 shadow-2xs"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
+                  onClick={expandAll}
+                  className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md cursor-pointer transition-colors"
                 >
-                  Barangay Cohorts
+                  Expand All
                 </button>
                 <button
                   type="button"
-                  onClick={() => setViewMode("leaderboard")}
-                  className={`px-3 py-1 rounded-md font-semibold text-[11px] transition-colors cursor-pointer ${
-                    viewMode === "leaderboard"
-                      ? "bg-white text-slate-900 shadow-2xs"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
+                  onClick={collapseAll}
+                  className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md cursor-pointer transition-colors"
                 >
-                  Flat Leaderboard
+                  Collapse All
                 </button>
               </div>
-
-              {/* Expand/Collapse All (Only in Barangay Mode) */}
-              {viewMode === "barangay" && (
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={expandAll}
-                    className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md cursor-pointer transition-colors"
-                  >
-                    Expand All
-                  </button>
-                  <button
-                    type="button"
-                    onClick={collapseAll}
-                    className="px-2 py-1 text-[11px] font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md cursor-pointer transition-colors"
-                  >
-                    Collapse All
-                  </button>
-                </div>
-              )}
             </div>
           </div>
 
@@ -513,12 +422,21 @@ function StaffRankingContent() {
                 <span className="font-medium text-xs">Aggregating barangay cohorts and deterministic rankings...</span>
               </div>
             </div>
-          ) : viewMode === "barangay" ? (
-            /* ================= VIEW 1: UNIFIED BARANGAY COHORTS ================= */
+          ) : (
+            /* ================= BARANGAY COHORTS ================= */
             <div className="space-y-3">
               {filteredBarangays.length === 0 ? (
                 <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500">
-                  No barangay data matches your current search or priority filter.
+                  {barangaySummary.length === 0 && servicedBarangaysCount > 0 ? (
+                    <div className="space-y-2">
+                      <div className="text-emerald-700 font-bold text-sm">All barangay damage requests have been approved or distributed!</div>
+                      <p className="text-xs text-slate-500">
+                        All ranked cohorts have received official OMAG approval. Check the <strong>Distribution Requests &amp; FIFO Execution</strong> tab to track stock contributions and release batches.
+                      </p>
+                    </div>
+                  ) : (
+                    "No barangay data matches your current search or priority filter."
+                  )}
                 </div>
               ) : (
                 filteredBarangays.map((stat, idx) => {
@@ -529,26 +447,24 @@ function StaffRankingContent() {
                   return (
                     <div
                       key={stat.barangay}
-                      className={`bg-white border rounded-xl overflow-hidden shadow-2xs transition-all ${
-                        isHigh
-                          ? "border-red-200/80 hover:border-red-300"
-                          : isMed
+                      className={`bg-white border rounded-xl overflow-hidden shadow-2xs transition-all ${isHigh
+                        ? "border-red-200/80 hover:border-red-300"
+                        : isMed
                           ? "border-amber-200/80 hover:border-amber-300"
                           : "border-slate-200 hover:border-slate-300"
-                      }`}
+                        }`}
                     >
                       {/* Barangay Cohort Header Card */}
                       <div className="p-4 flex flex-wrap items-center justify-between gap-4">
                         {/* Left: Barangay Rank & Identity */}
                         <div className="flex items-center gap-3.5 min-w-[200px]">
                           <div
-                            className={`flex flex-col items-center justify-center h-11 w-11 rounded-lg font-mono font-bold shrink-0 border ${
-                              isHigh
-                                ? "bg-red-600 text-white border-red-700"
-                                : isMed
+                            className={`flex flex-col items-center justify-center h-11 w-11 rounded-lg font-mono font-bold shrink-0 border ${isHigh
+                              ? "bg-red-600 text-white border-red-700"
+                              : isMed
                                 ? "bg-amber-500 text-white border-amber-600"
                                 : "bg-slate-700 text-white border-slate-800"
-                            }`}
+                              }`}
                           >
                             <span className="text-[9px] uppercase tracking-tighter">Urgency</span>
                             <span className="text-base leading-none">#{idx + 1}</span>
@@ -606,13 +522,12 @@ function StaffRankingContent() {
                           <div className="hidden md:flex items-center gap-2 w-32">
                             <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200">
                               <div
-                                className={`h-full rounded-full ${
-                                  stat.avgDamage >= 60
-                                    ? "bg-red-600"
-                                    : stat.avgDamage >= 30
+                                className={`h-full rounded-full ${stat.avgDamage >= 60
+                                  ? "bg-red-600"
+                                  : stat.avgDamage >= 30
                                     ? "bg-amber-500"
                                     : "bg-emerald-500"
-                                }`}
+                                  }`}
                                 style={{ width: `${Math.min(stat.avgDamage, 100)}%` }}
                               />
                             </div>
@@ -680,24 +595,22 @@ function StaffRankingContent() {
                                     setSelectedClaimId(item.claimId);
                                     setIsDetailOpen(true);
                                   }}
-                                  className={`p-3 rounded-lg border bg-white transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                                    itemIsHigh
-                                      ? "border-red-200 hover:border-red-400 hover:bg-red-50/20"
-                                      : itemIsMed
+                                  className={`p-3 rounded-lg border bg-white transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${itemIsHigh
+                                    ? "border-red-200 hover:border-red-400 hover:bg-red-50/20"
+                                    : itemIsMed
                                       ? "border-amber-200 hover:border-amber-400 hover:bg-amber-50/20"
                                       : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
-                                  }`}
+                                    }`}
                                 >
                                   {/* Left: Rank & Farmer Info */}
                                   <div className="flex items-start gap-3">
                                     <div
-                                      className={`flex flex-col items-center justify-center h-9 w-9 rounded-md font-mono font-bold shrink-0 text-white ${
-                                        itemIsHigh
-                                          ? "bg-red-600"
-                                          : itemIsMed
+                                      className={`flex flex-col items-center justify-center h-9 w-9 rounded-md font-mono font-bold shrink-0 text-white ${itemIsHigh
+                                        ? "bg-red-600"
+                                        : itemIsMed
                                           ? "bg-amber-500"
                                           : "bg-slate-600"
-                                      }`}
+                                        }`}
                                     >
                                       <span className="text-[8px] uppercase">Brgy</span>
                                       <span className="text-xs leading-none">#{claimIdx + 1}</span>
@@ -756,11 +669,10 @@ function StaffRankingContent() {
                                         {damageVal.toFixed(1)}%
                                       </span>
                                       <span
-                                        className={`text-[9px] px-1.5 py-0.2 rounded font-semibold uppercase ${
-                                          hasAssessed
-                                            ? "bg-purple-100 text-purple-800"
-                                            : "bg-blue-100 text-blue-800"
-                                        }`}
+                                        className={`text-[9px] px-1.5 py-0.2 rounded font-semibold uppercase ${hasAssessed
+                                          ? "bg-purple-100 text-purple-800"
+                                          : "bg-blue-100 text-blue-800"
+                                          }`}
                                       >
                                         {hasAssessed ? "Assessed" : "Reported"}
                                       </span>
@@ -777,155 +689,69 @@ function StaffRankingContent() {
                 })
               )}
             </div>
-          ) : (
-            /* ================= VIEW 2: FLAT MUNICIPAL LEADERBOARD ================= */
-            <div className="space-y-2.5">
-              {filteredClaims.length === 0 ? (
-                <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500">
-                  No ranked claims match your search or priority criteria.
-                </div>
-              ) : (
-                filteredClaims.map((item) => {
-                  const hasAssessed =
-                    item.claim?.report?.assessment?.assessedDamagePercent !== undefined &&
-                    item.claim?.report?.assessment?.assessedDamagePercent !== null;
-
-                  const damageVal = hasAssessed
-                    ? item.claim.report.assessment!.assessedDamagePercent
-                    : item.claim?.report?.reportedDamagePercent ?? 0;
-
-                  const isHigh = item.priorityLevel === "HIGH";
-                  const isMed = item.priorityLevel === "MEDIUM";
-                  const brgy = item.claim?.report?.farmer?.barangay || "Unassigned";
-
-                  return (
-                    <div
-                      key={item.id}
-                      className={`p-3.5 rounded-xl border bg-white shadow-2xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
-                        isHigh
-                          ? "border-red-200 hover:border-red-400"
-                          : isMed
-                          ? "border-amber-200 hover:border-amber-400"
-                          : "border-slate-200 hover:border-slate-300"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        {/* Municipal Rank Badge */}
-                        <div
-                          className={`flex flex-col items-center justify-center h-11 w-11 rounded-lg font-mono font-bold shrink-0 border ${
-                            isHigh
-                              ? "bg-red-600 text-white border-red-700"
-                              : isMed
-                              ? "bg-amber-500 text-white border-amber-600"
-                              : "bg-slate-700 text-white border-slate-800"
-                          }`}
-                        >
-                          <span className="text-[9px] uppercase tracking-tighter">Rank</span>
-                          <span className="text-base leading-none">#{item.rankPosition}</span>
-                        </div>
-
-                        {/* Case Details */}
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono font-bold text-slate-900 text-xs">
-                              {item.claim?.claimNumber}
-                            </span>
-                            <span className="text-slate-400">•</span>
-                            <span className="font-bold text-slate-800">
-                              {item.claim?.report?.farmer?.firstName} {item.claim?.report?.farmer?.lastName}
-                            </span>
-                            <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 flex items-center gap-0.5">
-                              <MapPin className="h-3 w-3 text-emerald-600" />
-                              <span>Brgy. {brgy}</span>
-                            </span>
-                          </div>
-
-                          <div className="text-[11px] text-slate-600 flex flex-wrap items-center gap-2">
-                            <span>Crop: <strong>{item.claim?.report?.crop?.cropType}</strong></span>
-                            <span>•</span>
-                            <span>Calamity: <strong>{item.claim?.report?.calamityType}</strong></span>
-                            <span>•</span>
-                            <span>
-                              Incident:{" "}
-                              <span className="font-mono">
-                                {item.claim?.report?.incidentDate
-                                  ? new Date(item.claim.report.incidentDate).toLocaleDateString()
-                                  : "N/A"}
-                              </span>
-                            </span>
-                          </div>
-
-                          {item.formulaBreakdown?.explanation && (
-                            <p className="text-[10px] font-mono text-slate-500 line-clamp-1">
-                              {item.formulaBreakdown.explanation}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Right: Score, Severity, and Action Buttons */}
-                      <div className="flex items-center gap-3 shrink-0 justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100">
-                        <div className="text-right">
-                          <div className="text-[9px] uppercase font-bold text-slate-400">
-                            Priority Score
-                          </div>
-                          <div className="font-mono text-xs font-bold text-slate-900">
-                            {item.score.toFixed(1)} / 100
-                          </div>
-                          <div className="flex items-center gap-1 mt-0.5 justify-end">
-                            <span className="font-mono font-bold text-xs text-slate-800">
-                              {damageVal.toFixed(1)}%
-                            </span>
-                            <span
-                              className={`text-[8px] px-1 rounded font-semibold uppercase ${
-                                hasAssessed ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"
-                              }`}
-                            >
-                              {hasAssessed ? "Assessed" : "Reported"}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedClaimId(item.claimId);
-                              setIsDetailOpen(true);
-                            }}
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-[11px] transition-colors cursor-pointer"
-                          >
-                            Inspect
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDistributionModal(brgy)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-700 text-white font-bold text-[11px] hover:bg-emerald-800 transition-colors cursor-pointer shadow-2xs"
-                            title={`Requisition distribution for Brgy. ${brgy}`}
-                          >
-                            <Package className="h-3 w-3" />
-                            <span>Distribute</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
           )}
         </div>
       ) : (
         /* Requests & Execution Tab */
         <div className="space-y-4">
+          {/* Contribution & Allocation Overview Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  Total Aid Contribution
+                </span>
+                <Package className="h-4 w-4 text-purple-600" />
+              </div>
+              <div className="mt-1 text-lg font-bold font-mono text-slate-900">
+                {requests
+                  .filter((r) => r.status === "APPROVED" || r.status === "DISTRIBUTED")
+                  .reduce((sum, r) => sum + Number(r.requestedQuantity || 0), 0)
+                  .toLocaleString()} <span className="text-xs font-normal text-slate-500">Units</span>
+              </div>
+              <div className="text-[10px] text-emerald-600 font-medium mt-0.5">
+                Across {servicedBarangaysCount} approved barangays
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  Ready for FIFO Dispatch
+                </span>
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              </div>
+              <div className="mt-1 text-lg font-bold font-mono text-emerald-700">
+                {approvedCount} <span className="text-xs font-normal text-slate-500">Approved Dockets</span>
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">
+                Awaiting staff warehouse stock release
+              </div>
+            </div>
+
+            <div className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  Pending Head Review
+                </span>
+                <Clock className="h-4 w-4 text-amber-600" />
+              </div>
+              <div className="mt-1 text-lg font-bold font-mono text-amber-700">
+                {pendingCount} <span className="text-xs font-normal text-slate-500">Requests</span>
+              </div>
+              <div className="text-[10px] text-slate-500 mt-0.5">
+                Queued for OMAG Head authorization
+              </div>
+            </div>
+          </div>
+
           <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="font-bold text-slate-900 text-sm">
-                Barangay Resource Distribution Dockets
+                Barangay Resource Distribution Dockets &amp; Contributions
               </h3>
               <p className="text-[11px] text-slate-500">
-                Track submitted requests through Head Approval (PENDING → APPROVED) and execute atomic FIFO allocation.
+                Tracking approved aid contributions per barangay/farmer and executing atomic FIFO allocation across inventory batches.
               </p>
             </div>
 

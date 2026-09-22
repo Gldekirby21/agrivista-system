@@ -15,7 +15,7 @@ export const ForecastResultCard: React.FC<ForecastResultCardProps> = ({ result }
 
   return (
     <div className="bg-white border border-emerald-200 rounded-xl p-5 shadow-xs space-y-4 text-xs">
-      {/* Header & Badges */}
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2">
           <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
@@ -28,15 +28,6 @@ export const ForecastResultCard: React.FC<ForecastResultCardProps> = ({ result }
               {result.projectedFarmers ? ` | Beneficiaries: ${result.projectedFarmers}` : ""}
             </p>
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-full font-semibold text-[10px]">
-            🟡 PROPOSED SYSTEM DESIGN
-          </span>
-          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-300 rounded-full font-semibold text-[10px]">
-            ⚫ SYNTHETIC DEMONSTRATION DATA
-          </span>
         </div>
       </div>
 

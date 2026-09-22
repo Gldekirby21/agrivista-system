@@ -303,9 +303,9 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
     verificationNotes = `Photograph "${file.name}" is loaded and ready. Click the "Scan with AI" button below to extract camera EXIF telemetry and calculate distance to the target parcel.`;
   } else if (file && hasScanned) {
     if (photoLat === null || photoLng === null) {
-      verificationStatus = "NOT_ACCEPTED";
+      verificationStatus = "REVIEW";
       verificationNotes =
-        "GPS metadata unavailable; embedded GPS information cannot be independently verified.";
+        "GPS metadata unavailable. Great-Circle Geofence cannot be computed. Ground verification may be required.";
     } else if (registeredLat === null || registeredLng === null) {
       verificationStatus = "REVIEW";
       verificationNotes =
@@ -325,15 +325,21 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
     }
   }
 
-  // ✅ Supporting-evidence gate for review eligibility
-  const hasSupportingMetadata =
-    calculatedDistance !== null ||
-    photoTimestamp !== null ||
-    deviceMake !== null ||
-    deviceModel !== null;
+  // Baseline checks required to submit to OMAG Head:
+  // 3. EXIF Camera Timestamp: photoTimestamp must be valid (REQUIRED)
+  // 4. Device Hardware Sensor: deviceMake OR deviceModel must be recorded (REQUIRED)
+  // (1. GPS Location Embedded & 2. Great-Circle Geofence are NOT REQUIRED)
+  // Rule:
+  // - If 3 & 4 are valid: Can submit request to OMAG Head, and AI Advisory is required for Head review.
+  // - If 3 or 4 is NOT valid: Blocked from submission.
+  const hasGeofence = calculatedDistance !== null;
+  const hasTimestamp = photoTimestamp !== null;
+  const hasDeviceHardware = deviceMake !== null || deviceModel !== null;
+  const theRequiredTwoAreValid = hasTimestamp && hasDeviceHardware;
+  const hasAiAdvisory = hasScanned && revealedFinalStatus;
 
-  const canBeReviewed =
-    hasScanned && revealedFinalStatus && hasSupportingMetadata;
+  // Review & submission is enabled once scanned and the 2 required checks (Timestamp & Device Sensor) are valid
+  const canBeReviewed = hasScanned && revealedFinalStatus && theRequiredTwoAreValid;
 
   // ✅ Farmer evaluation is satisfied when a case exists OR user just created one
   const isFarmerEvaluated =
@@ -390,20 +396,11 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
     reader.readAsDataURL(selected);
   };
 
-  // Explicit Scan with AI Action with Exact 7-Step Progression & Staggered Reveal
   const handleRunScan = async () => {
     if (!file) {
       setMessage({
         type: "error",
         text: "Please select or drop a photograph first.",
-      });
-      return;
-    }
-
-    if (!isFarmerEvaluated) {
-      setMessage({
-        type: "error",
-        text: "Please evaluate the farmer first before running AI metadata verification.",
       });
       return;
     }
@@ -724,17 +721,6 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
           <span>Back to Verification Records</span>
         </Link>
       </div>
-      {/* Farmer Pre-fill Banner */}
-      {prefilledFarmerName && (
-        <div className="flex items-center gap-3 p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs">
-          <User className="w-4 h-4 text-emerald-700 shrink-0" />
-          <div>
-            <span className="font-bold text-emerald-900">Pre-filled Farmer: </span>
-            <span className="font-semibold text-emerald-800">{prefilledFarmerName}</span>
-            <span className="text-emerald-600 ml-2">— Case auto-selected below. You may change it if needed.</span>
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Photo & Raw EXIF Metadata */}
@@ -744,116 +730,11 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-800">
                 <Camera className="w-4 h-4 text-emerald-600" />
-                <span>Submitted Photograph Record</span>
+                <span>1. Select Crop-Loss Case and Upload Photograph</span>
               </div>
               <span className="text-[11px] font-mono font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
                 {file ? `${(file.size / 1024).toFixed(1)} KB` : "0.0 KB"}
               </span>
-            </div>
-
-            {/* Target Selection */}
-            <div className="space-y-3">
-              {intakeMode === "CASE" ? (
-                <div className="space-y-2">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                    Select Target Crop-Loss Case <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    suppressHydrationWarning
-                    value={selectedCaseId}
-                    onChange={(e) => {
-                      const val = e.target.value ? Number(e.target.value) : "";
-                      setSelectedCaseId(val);
-                      if (val) {
-                        const matched = cases.find((c) => c.id === val);
-                        if (matched) {
-                          setSelectedParcelId(matched.parcelId);
-                        }
-                      }
-                    }}
-                    disabled={loadingCases || submitting}
-                    className="w-full rounded-xl border border-emerald-300 bg-emerald-50/40 px-3 py-2 text-xs font-semibold text-slate-900 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none cursor-pointer"
-                    required
-                  >
-                    <option value="">-- Select Active Crop-Loss Case --</option>
-                    {cases.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.claimNumber || c.reportNumber} • {c.farmerName} ({c.cropType}) — Brgy. {c.barangay} [{c.photoCount} photos]
-                      </option>
-                    ))}
-                  </select>
-
-                  {selectedCase && (
-                    <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-1.5 text-xs">
-                      <div className="flex items-center justify-between font-bold text-emerald-950">
-                        <span className="font-mono text-[11px] bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-300">
-                          {selectedCase.claimNumber || selectedCase.reportNumber}
-                        </span>
-                        <span className="text-[10px] uppercase font-bold text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">
-                          {selectedCase.caseStatus}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5 pt-1 text-[11px] text-slate-700">
-                        <div>
-                          <span className="text-slate-500 block text-[10px]">Authoritative Farmer:</span>
-                          <span className="font-bold text-slate-900">{selectedCase.farmerName}</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block text-[10px]">Crop / Damage:</span>
-                          <span className="font-semibold text-slate-900">{selectedCase.cropType} ({selectedCase.reportedDamagePercent}%)</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block text-[10px]">Farm Parcel:</span>
-                          <span className="font-semibold text-slate-900">Parcel {selectedCase.parcelNumber} ({selectedCase.barangay})</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-500 block text-[10px]">Cadastral GPS:</span>
-                          <span className="font-mono text-emerald-700">
-                            {selectedCase.parcelLatitude && selectedCase.parcelLongitude ? "📍 Centroid Ready" : "⚠️ No GPS"}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-emerald-800 font-medium pt-1 border-t border-emerald-200/60">
-                        🔒 Authoritative backend values: Farmer, Farm, and Parcel will be locked from this damage report.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                    Target Farm Parcel <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    suppressHydrationWarning
-                    value={selectedParcelId}
-                    onChange={(e) =>
-                      setSelectedParcelId(
-                        e.target.value ? Number(e.target.value) : ""
-                      )
-                    }
-                    disabled={loadingParcels || submitting}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-900 focus:bg-white focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 transition-all outline-none cursor-pointer"
-                    required
-                  >
-                    <option value="">-- Select Target Farm Parcel --</option>
-                    {parcels.map((p) => {
-                      const brgy = p.farm?.barangay || "Polomolok";
-                      const farmerName = p.farm?.farmer
-                        ? `${p.farm.farmer.firstName} ${p.farm.farmer.lastName}`
-                        : "Registered Parcel";
-                      const gpsStatus =
-                        p.latitude !== null ? "📍 GPS Ready" : "⚠️ No GPS";
-
-                      return (
-                        <option key={p.id} value={p.id}>
-                          Brgy. {brgy} • Lot {p.parcelNumber} ({p.areaHa} ha) • {farmerName} [{gpsStatus}]
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              )}
             </div>
 
             {/* Real Photograph Preview Container */}
@@ -1111,73 +992,12 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
 
         {/* Right Column */}
         <div className="lg:col-span-8 space-y-6">
-          {/* ✅ Panel 0: STEP 1 — Farmer Evaluation & Case Intake (BEFORE AI scan) */}
-          <div
-            className={cn(
-              "bg-white border rounded-2xl p-6 space-y-4 shadow-xs",
-              isFarmerEvaluated ? "border-emerald-200" : "border-amber-300"
-            )}
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
-              <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-900">
-                <ClipboardList className="w-5 h-5 text-emerald-700" />
-                <span>Step 1: Farmer Evaluation &amp; Case Intake</span>
-              </div>
-              {isFarmerEvaluated ? (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" /> COMPLETED
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg bg-amber-100 text-amber-900 border border-amber-300 animate-pulse">
-                  <AlertTriangle className="w-4 h-4 text-amber-600" /> ACTION REQUIRED
-                </span>
-              )}
-            </div>
-
-            {isFarmerEvaluated ? (
-              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-1.5">
-                <p className="text-xs font-bold text-emerald-900">
-                  Farmer crop-loss evaluation recorded.
-                </p>
-                <p className="text-[11px] text-emerald-800 leading-relaxed">
-                  You may now proceed to <span className="font-bold">Step 2: AI Metadata Verification</span> on the uploaded photograph below.
-                </p>
-              </div>
-            ) : (
-              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 space-y-3">
-                <p className="text-xs font-bold text-amber-900">
-                  Evaluate the farmer first before running AI metadata verification.
-                </p>
-                <p className="text-[11px] text-amber-800 leading-relaxed">
-                  The official PCIC crop-loss case must be recorded before the system can perform AI / EXIF verification on this photograph. This ensures authoritative farmer, farm, and parcel values are locked before any verification evidence is captured.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setIsEvaluateFarmerOpen(true)}
-                  disabled={!selectedParcelId && !selectedCaseId}
-                  className={cn(
-                    "px-5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl shadow-xs hover:shadow-md transition-all flex items-center gap-2 cursor-pointer",
-                    (!selectedParcelId && !selectedCaseId) ? "opacity-50 cursor-not-allowed" : ""
-                  )}
-                >
-                  <ClipboardList className="w-4 h-4 text-emerald-200" />
-                  <span>Evaluate Farmer Now</span>
-                </button>
-                {!selectedParcelId && !selectedCaseId && (
-                  <p className="text-[10px] text-amber-700 italic">
-                    ⚠ Select a target crop-loss case or farm parcel first.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Panel 1: Deterministic Verification Evidence (Authoritative) */}
+          {/* Panel 1: FDD Function 2 & 3: Verify Metadata & Compare with Farm Parcel */}
           <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5 shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3.5">
               <div className="flex items-center gap-2.5 text-sm font-bold uppercase tracking-wider text-slate-900">
                 <ShieldCheck className="w-5 h-5 text-emerald-700" />
-                <span>Step 2: Deterministic Verification Evidence (Authoritative)</span>
+                <span>2. Verify GPS, Timestamp, and Device Metadata &amp; 3. Compare with Registered Farm Parcel</span>
               </div>
               <div className="flex items-center gap-2">
                 <select
@@ -1235,8 +1055,8 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
                               PRESENT
                             </span>
                           ) : (
-                            <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 text-[10px] animate-in fade-in-50">
-                              MISSING
+                            <span className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 text-[10px] animate-in fade-in-50">
+                              UNAVAILABLE
                             </span>
                           )
                         ) : isScanning ? (
@@ -1263,7 +1083,7 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
                           calculatedDistance !== null ? (
                             `${calculatedDistance.toFixed(1)}m from parcel (Tolerance: ${thresholdMeters}m)`
                           ) : (
-                            "Cannot evaluate distance"
+                            "Cannot evaluate distance (No GPS)"
                           )
                         ) : isScanning ? (
                           <span className="text-teal-600 animate-pulse font-mono">Calculating Haversine...</span>
@@ -1284,8 +1104,8 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
                               </span>
                             )
                           ) : (
-                            <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-[10px] animate-in fade-in-50">
-                              CANNOT EVALUATE
+                            <span className="text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 text-[10px] animate-in fade-in-50">
+                              NOT RECORDED
                             </span>
                           )
                         ) : isScanning ? (
@@ -1305,7 +1125,7 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
                       hasScanned && revealedChecksCount >= 3 ? "bg-white" : "opacity-40"
                     )}>
                       <td className="py-2.5 px-3 font-semibold text-slate-800">
-                        3. EXIF Camera Timestamp
+                        3. EXIF Camera Timestamp <span className="text-[10px] font-bold text-emerald-700 font-mono">(REQUIRED)</span>
                       </td>
                       <td className="py-2.5 px-3 text-slate-600 text-[11px]">
                         {hasScanned && revealedChecksCount >= 3 ? (
@@ -1327,7 +1147,7 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
                               AUTHENTIC
                             </span>
                           ) : (
-                            <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-[10px] animate-in fade-in-50">
+                            <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 text-[10px] animate-in fade-in-50">
                               MISSING
                             </span>
                           )
@@ -1348,7 +1168,7 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
                       hasScanned && revealedChecksCount >= 4 ? "bg-white" : "opacity-40"
                     )}>
                       <td className="py-2.5 px-3 font-semibold text-slate-800">
-                        4. Device Hardware Sensor
+                        4. Device Hardware Sensor <span className="text-[10px] font-bold text-emerald-700 font-mono">(REQUIRED)</span>
                       </td>
                       <td className="py-2.5 px-3 text-slate-600 text-[11px]">
                         {hasScanned && revealedChecksCount >= 4 ? (
@@ -1366,10 +1186,47 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
                               RECORDED
                             </span>
                           ) : (
-                            <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-[10px] animate-in fade-in-50">
+                            <span className="text-rose-700 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 text-[10px] animate-in fade-in-50">
                               MISSING
                             </span>
                           )
+                        ) : isScanning ? (
+                          <span className="text-teal-600 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200 text-[10px] animate-pulse">
+                            CHECKING...
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200 text-[10px]">
+                            QUEUED
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+
+                    <tr className={cn(
+                      "transition-all duration-300",
+                      hasScanned && revealedFinalStatus ? "bg-white" : "opacity-40"
+                    )}>
+                      <td className="py-2.5 px-3 font-semibold text-slate-800">
+                        5. AI Advisory Interpretation {theRequiredTwoAreValid ? (
+                          <span className="text-[10px] font-bold text-purple-700 font-mono">(REQUIRED FOR HEAD REVIEW)</span>
+                        ) : (
+                          <span className="text-[10px] font-bold text-slate-400 font-mono">(STANDBY)</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 text-[11px]">
+                        {hasScanned && revealedFinalStatus ? (
+                          `${verificationStatus === "ACCEPTED" ? "CONSISTENT" : verificationStatus === "REVIEW" ? "INSUFFICIENT_EVIDENCE" : "INCONSISTENT"} (Advisory generated)`
+                        ) : isScanning ? (
+                          <span className="text-teal-600 animate-pulse font-mono">Synthesizing Advisory...</span>
+                        ) : (
+                          "Awaiting AI scan"
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold">
+                        {hasScanned && revealedFinalStatus ? (
+                          <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 text-[10px] animate-in fade-in-50">
+                            EVALUATED
+                          </span>
                         ) : isScanning ? (
                           <span className="text-teal-600 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200 text-[10px] animate-pulse">
                             CHECKING...
@@ -1409,39 +1266,34 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
                       AI Consistency Assessment
                     </span>
                     <span className="text-sm font-bold text-purple-950 block">
-                      {verificationStatus === "ACCEPTED"
-                        ? "CONSISTENT"
-                        : verificationStatus === "REVIEW"
-                          ? "INSUFFICIENT_EVIDENCE"
-                          : "INCONSISTENT"}
+                      {!photoTimestamp || (!deviceMake && !deviceModel)
+                        ? "INSUFFICIENT_EVIDENCE"
+                        : "CONSISTENT"}
                     </span>
                   </div>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                    <span className="text-[10px] text-slate-500 uppercase font-bold block">
+
+                  <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl space-y-1">
+                    <span className="text-[10px] text-purple-700 uppercase font-bold block">
                       AI Advisory Recommendation
                     </span>
-                    <span className={cn(
-                      "text-sm font-bold block",
-                      verificationStatus === "ACCEPTED" ? "text-emerald-700" : verificationStatus === "REVIEW" ? "text-amber-700" : "text-rose-700"
-                    )}>
-                      {verificationStatus === "ACCEPTED"
-                        ? "ACCEPT"
-                        : verificationStatus === "REVIEW"
-                          ? "REVIEW"
-                          : "REJECT"}
+                    <span className="text-sm font-bold text-purple-950 block">
+                      {!photoTimestamp || (!deviceMake && !deviceModel)
+                        ? "REJECT"
+                        : "ACCEPT"}
                     </span>
                   </div>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
-                    <span className="text-[10px] text-slate-500 uppercase font-bold block">
+
+                  <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl space-y-1">
+                    <span className="text-[10px] text-purple-700 uppercase font-bold block">
                       OMAg Head Review Required
                     </span>
                     <span
                       className={cn(
                         "text-sm font-bold block",
-                        verificationStatus === "ACCEPTED" ? "text-emerald-700" : "text-amber-700"
+                        photoTimestamp && (deviceMake || deviceModel) ? "text-emerald-700" : "text-amber-700"
                       )}
                     >
-                      {verificationStatus === "ACCEPTED" ? "NO (Clean Ground Truth)" : "YES (Manual Inspection)"}
+                      {photoTimestamp && (deviceMake || deviceModel) ? "READY FOR HEAD" : "BLOCKED (Incomplete Evidence)"}
                     </span>
                   </div>
                 </div>
@@ -1449,22 +1301,24 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
                 <div className="space-y-1 text-xs">
                   <p className="font-bold text-slate-700">AI Explanation &amp; Ground Truth Summary:</p>
                   <p className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 leading-relaxed font-normal">
-                    {verificationStatus === "ACCEPTED"
-                      ? `Gemini AI advisory: Evaluated photo EXIF telemetry matches registered parcel #${selectedParcel?.parcelNumber || "LOT"} within ${thresholdMeters}m geofence tolerance (${calculatedDistance?.toFixed(1)}m calculated vector). Advisory only; does not independently establish authenticity.`
-                      : verificationStatus === "REVIEW"
-                        ? `Target cadastral parcel lacks registered centroid GPS in municipal registry. Gemini AI recommends physical technician survey to corroborate parcel boundaries.`
-                        : `Photo lacks valid embedded GPS metadata or vector distance (${calculatedDistance !== null ? calculatedDistance.toFixed(1) + "m" : "N/A"}) exceeds ${thresholdMeters}m geofence. Cannot confirm physical farm presence.`}
+                    {!photoTimestamp || (!deviceMake && !deviceModel)
+                      ? `Gemini AI advisory: Photograph lacks authentic camera hardware sensor or EXIF timestamp metadata. Cannot corroborate if this is an authentic field photograph (possible downloaded or modified image). Recommendation: REJECT or require re-capture.`
+                      : calculatedDistance !== null && calculatedDistance <= thresholdMeters
+                        ? `Gemini AI advisory: Evaluated photo EXIF telemetry matches registered parcel #${selectedParcel?.parcelNumber || "LOT"} within ${thresholdMeters}m geofence tolerance (${calculatedDistance.toFixed(1)}m calculated vector). Camera sensor (${[deviceMake, deviceModel].filter(Boolean).join(" ")}) and timestamp authentic.`
+                        : photoTimestamp && (deviceMake || deviceModel)
+                          ? `Gemini AI advisory: Authentic camera hardware sensor (${[deviceMake, deviceModel].filter(Boolean).join(" ")}) and timestamp recorded. Photo verified as camera-original field capture.`
+                          : `Photograph evidence is under review.`}
                   </p>
                 </div>
 
                 <div className="space-y-1 text-xs">
                   <p className="font-bold text-slate-700">AI Suggested Municipal Audit Note:</p>
                   <p className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-mono text-[11px]">
-                    {verificationStatus === "ACCEPTED"
-                      ? `[AI ADVISORY] Consistent: GPS match on parcel #${selectedParcel?.parcelNumber || "LOT"} (${calculatedDistance?.toFixed(1)}m from centroid). Advisory analysis complete.`
-                      : verificationStatus === "REVIEW"
-                        ? `[AI ADVISORY] Flagged for Review: Missing reference parcel coordinates. Field corroboration required.`
-                        : `[AI ADVISORY] Review/Reject: Missing/Out-of-bound GPS telemetry. Questionable metadata cannot be accepted as sufficient verification evidence.`}
+                    {!photoTimestamp || (!deviceMake && !deviceModel)
+                      ? `[AI ADVISORY] Reject / Insufficient Evidence: Missing authentic camera hardware or timestamp metadata.`
+                      : calculatedDistance !== null && calculatedDistance <= thresholdMeters
+                        ? `[AI ADVISORY] Consistent: Camera sensor and timestamp authentic; GPS matches parcel #${selectedParcel?.parcelNumber || "LOT"} (${calculatedDistance.toFixed(1)}m).`
+                        : `[AI ADVISORY] Consistent: Verified camera-original evidence (${[deviceMake, deviceModel].filter(Boolean).join(" ")} captured on ${new Date(photoTimestamp!).toLocaleDateString()}).`}
                   </p>
                 </div>
               </div>
@@ -1485,20 +1339,18 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
                   Awaiting AI &amp; EXIF Metadata Scan
                 </p>
                 <p className="text-[11px] text-slate-500 max-w-md mx-auto">
-                  {isFarmerEvaluated
-                    ? "Click \u201c\u2728 Scan with AI\u201d on your uploaded photograph to activate the automated 7-step Gemini AI advisory interpretation."
-                    : "Complete Step 1: Farmer Evaluation above first, then you can scan the uploaded photograph."}
+                  Click &ldquo;✨ Scan with AI&rdquo; on your uploaded photograph to activate automated AI metadata verification and advisory interpretation.
                 </p>
               </div>
             )}
           </div>
 
-          {/* Panel 3: Municipal System Review & Notes — only when reviewable */}
+          {/* Panel 3: FDD Function 4: Display and Record Verification Findings */}
           {canBeReviewed ? (
             <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4 shadow-xs">
               <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-900 border-b border-slate-100 pb-3.5">
                 <User className="w-5 h-5 text-emerald-700" />
-                <span>Step 3: Municipal Internal System Review</span>
+                <span>4. Display and Record Verification Findings</span>
               </div>
 
               <form onSubmit={handleSaveAndSubmitDossier} className="space-y-4">
@@ -1551,11 +1403,18 @@ export const PhotoVerificationNewForm: React.FC<PhotoVerificationNewFormProps> =
                   This record cannot be submitted for OMAG Head review.
                 </p>
                 <p className="text-[11px] text-rose-800 leading-relaxed">
-                  All supporting verification checks (Great-Circle Geofence, EXIF Camera Timestamp, Device Hardware Sensor) are missing or unevaluable. Without any corroborating metadata, there is no basis for a manual approve/reject decision. The dossier is classified as <span className="font-bold">NOT ACCEPTED</span> and will not be routed to the review queue.
+                  The following <span className="font-bold">required camera verification checks</span> are missing or invalid:
+                </p>
+                <ul className="text-[11px] text-rose-800 list-disc list-inside space-y-0.5">
+                  {!hasTimestamp && <li><span className="font-bold">EXIF Camera Timestamp (3)</span> — Photo timestamp metadata not detected.</li>}
+                  {!hasDeviceHardware && <li><span className="font-bold">Device Hardware Sensor (4)</span> — Camera make/model sensor metadata not detected.</li>}
+                </ul>
+                <p className="text-[11px] text-rose-800 leading-relaxed">
+                  Both EXIF Camera Timestamp (3) and Device Hardware Sensor (4) must be valid to submit a request to OMAG Head.
                 </p>
               </div>
               <p className="text-[11px] text-slate-500 italic">
-                Please upload an authentic camera-original photograph containing GPS, timestamp, and device metadata before re-scanning.
+                Please upload an authentic camera-original photograph containing valid timestamp and device hardware sensor metadata.
               </p>
             </div>
           ) : null}

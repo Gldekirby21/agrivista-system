@@ -343,17 +343,23 @@ function StaffInventoryContent() {
       )}
 
       {activeTab === "distribute" && (
-        <div className="space-y-6">
-          <div className="flex justify-end">
-            <button
-              onClick={() => handleOpenDistribute()}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center gap-2"
-            >
-              <Send className="w-3.5 h-3.5" />
-              Execute Live Distribution
-            </button>
+        <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-4">
+          <div className="mx-auto w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <Send className="w-6 h-6" />
           </div>
-          <FifoAllocationPreview />
+          <div className="max-w-md mx-auto space-y-1">
+            <h3 className="font-bold text-slate-900 text-sm">Live FIFO Stock Distribution</h3>
+            <p className="text-xs text-slate-500">
+              Distribute seeds and fertilizer directly to RSBSA beneficiaries using automatic FIFO batch deduction.
+            </p>
+          </div>
+          <button
+            onClick={() => handleOpenDistribute()}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm inline-flex items-center gap-2 cursor-pointer"
+          >
+            <Send className="w-3.5 h-3.5" />
+            Launch Distribution Modal
+          </button>
         </div>
       )}
 

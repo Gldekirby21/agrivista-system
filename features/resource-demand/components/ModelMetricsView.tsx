@@ -9,14 +9,9 @@ interface ModelMetricsViewProps {
   onRetrainSuccess?: () => void;
 }
 
-export const ModelMetricsView: React.FC<ModelMetricsViewProps> = ({
-  isStaff = false,
-  onRetrainSuccess,
-}) => {
+export const ModelMetricsView: React.FC<ModelMetricsViewProps> = () => {
   const [modelData, setModelData] = useState<DualResourceModelsDTO | null>(null);
   const [loading, setLoading] = useState(true);
-  const [retraining, setRetraining] = useState(false);
-  const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const fetchModels = async () => {
     setLoading(true);
@@ -36,42 +31,6 @@ export const ModelMetricsView: React.FC<ModelMetricsViewProps> = ({
   useEffect(() => {
     fetchModels();
   }, []);
-
-  const handleRetrain = async () => {
-    if (!confirm("Retrain Seed and Fertilizer RandomForest models using current historical agricultural data?")) {
-      return;
-    }
-    setRetraining(true);
-    setMessage(null);
-
-    try {
-      const res = await fetch("/api/resource-demand/train", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          modelVersion: "v1.1.0",
-          useSyntheticFallback: true,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Model training failed");
-      }
-
-      const data = await res.json();
-      setMessage({
-        type: "success",
-        text: `Models retrained successfully! Evaluated on holdout test partition. Seed R²: ${data.seedModel.r2Score.toFixed(3)}, Fertilizer R²: ${data.fertilizerModel.r2Score.toFixed(3)}`,
-      });
-      await fetchModels();
-      if (onRetrainSuccess) onRetrainSuccess();
-    } catch (err: any) {
-      setMessage({ type: "error", text: err.message || "Retraining failed" });
-    } finally {
-      setRetraining(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -108,40 +67,7 @@ export const ModelMetricsView: React.FC<ModelMetricsViewProps> = ({
               Dual RandomForestRegressor pipelines evaluating seed requirement (kg) and fertilizer requirement (bags).
             </p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full font-semibold text-[10px]">
-              🟡 PROPOSED SYSTEM DESIGN
-            </span>
-            {isStaff && (
-              <button
-                onClick={handleRetrain}
-                disabled={retraining}
-                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center gap-1.5"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${retraining ? "animate-spin" : ""}`} />
-                {retraining ? "Training Models..." : "Retrain Models"}
-              </button>
-            )}
-          </div>
         </div>
-
-        {message && (
-          <div
-            className={`p-3 rounded-lg border flex items-center gap-2 text-xs ${
-              message.type === "success"
-                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                : "bg-red-50 border-red-200 text-red-700"
-            }`}
-          >
-            {message.type === "success" ? (
-              <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
-            ) : (
-              <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
-            )}
-            <span>{message.text}</span>
-          </div>
-        )}
 
         {/* Dual Model Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

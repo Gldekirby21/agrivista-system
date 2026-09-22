@@ -13,7 +13,7 @@ export const metadata = {
 
 export default async function HeadPhotoVerificationPage() {
   await requireRole(["OMAG_HEAD"]);
-  const result = await getCropLossCaseVerifications({ page: 1, limit: 50 });
+  const result = await getCropLossCaseVerifications({ page: 1, limit: 50, userRole: "OMAG_HEAD" });
 
   return (
     <div className="flex flex-1 flex-col min-h-0">

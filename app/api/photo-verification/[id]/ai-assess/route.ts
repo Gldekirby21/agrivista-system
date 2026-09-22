@@ -7,7 +7,7 @@ interface RouteParams {
 }
 
 export async function POST(req: NextRequest, { params }: RouteParams) {
-  const auth = await requireRole(["OMAG_STAFF"], req);
+  const auth = await requireRole(["OMAG_STAFF", "OMAG_HEAD"], req);
   if (!auth.authorized) {
     return auth.response;
   }

@@ -6,8 +6,8 @@ import { requireRole } from "@/lib/auth/session";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Resource Demand Oversight | OMAG Polomolok",
-  description: "Executive oversight for agricultural resource demand forecasting and model evaluation.",
+  title: "Historical Crop Yield & Purchase Modeling | OMAG Polomolok",
+  description: "Executive oversight for historical crop yield records and purchase modeling estimates.",
 };
 
 export default async function HeadResourceDemandPage() {
@@ -16,8 +16,8 @@ export default async function HeadResourceDemandPage() {
   return (
     <div className="flex flex-1 flex-col min-h-0">
       <Header
-        title="Resource Demand Modeling Oversight"
-        subtitle="Executive oversight of municipal seed and fertilizer forecasts, model accuracy, and historical trends."
+        title="Historical Crop Yield & Purchase Modeling"
+        subtitle="Executive oversight of historical crop production data, estimated resource requirements, and modeling results."
         role="OMAG_HEAD"
       />
       <main className="flex-1 p-6 md:p-8 overflow-y-auto">

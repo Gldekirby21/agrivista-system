@@ -208,12 +208,7 @@ function SidebarContent({
 
   const headPhotoItems: SubmenuItem[] = [
     {
-      label: "View Photo Submissions",
-      href: "/head/photo-verification/new",
-      isActive: checkSubmenuActive("/head/photo-verification/new"),
-    },
-    {
-      label: "Verification & Crop-Loss Details",
+      label: "Photo Verification & Reviews",
       href: "/head/photo-verification",
       isActive: checkSubmenuActive("/head/photo-verification"),
     },
@@ -221,9 +216,19 @@ function SidebarContent({
 
   const headHistoricalItems: SubmenuItem[] = [
     {
-      label: "Historical & Resource Modeling",
-      href: "/head/resource-demand",
-      isActive: checkSubmenuActive("/head/resource-demand"),
+      label: "1. Historical Crop Production",
+      href: "/head/resource-demand?tab=historical",
+      isActive: checkSubmenuActive("/head/resource-demand?tab=historical"),
+    },
+    {
+      label: "2. Estimated Requirements",
+      href: "/head/resource-demand?tab=forecast",
+      isActive: checkSubmenuActive("/head/resource-demand?tab=forecast"),
+    },
+    {
+      label: "3. Results & History",
+      href: "/head/resource-demand?tab=history",
+      isActive: checkSubmenuActive("/head/resource-demand?tab=history"),
     },
   ];
 
@@ -461,10 +466,10 @@ function SidebarContent({
               onExpandSidebar={toggleSidebar}
             />
 
-            {/* 4. Historical & Resource Modeling */}
+            {/* 4. Historical Crop Yield & Purchase Modeling */}
             <NavGroup
               id="historical"
-              label="Historical & Resource Modeling"
+              label="Historical Crop Yield & Purchase Modeling"
               icon={LineChart}
               items={headHistoricalItems}
               isExpanded={expandedGroups["historical"] || false}
