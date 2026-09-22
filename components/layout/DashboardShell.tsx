@@ -19,7 +19,7 @@ export const DashboardShell: React.FC<DashboardShellProps> = ({
 }) => {
   return (
     <LayoutProvider>
-      <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#f6f8fc]">
+      <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#f4f7f4]">
         {/* 1. Full-Width Gmail-Style Top Header Bar */}
         <GmailTopBar userFullName={userFullName} role={currentRole} />
 

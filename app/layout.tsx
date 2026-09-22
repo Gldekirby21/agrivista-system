@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "OMAG Polomolok Agricultural Resource Distribution & Production Analytics",
   description:
     "Official management system for the Office of the Municipal Agriculturist (OMAG), Municipality of Polomolok, South Cotabato. Supporting RSBSA registration, parcel georeferencing, photo metadata verification, crop loss monitoring, and FIFO inventory distribution.",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -15,7 +20,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className="min-h-screen bg-slate-50 text-slate-900 antialiased"
+        className="min-h-screen bg-[#f4f7f4] text-slate-900 antialiased"
         suppressHydrationWarning
       >
         {children}

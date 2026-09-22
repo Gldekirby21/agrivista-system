@@ -384,7 +384,7 @@ function SidebarContent({
   return (
     <aside
       className={cn(
-        "flex flex-col shrink-0 h-full bg-[#f6f8fc] select-none transition-all duration-300 ease-in-out py-2 pl-3 pr-2 border-r border-slate-200/80",
+        "flex flex-col shrink-0 h-full bg-[#f4f7f4] select-none transition-all duration-300 ease-in-out py-2 pl-3 pr-2 border-r border-slate-200/80",
         isSidebarCollapsed ? "w-[76px]" : "w-64"
       )}
       aria-label="Main Navigation"
@@ -757,7 +757,7 @@ function SidebarContent({
 
 export const Sidebar: React.FC<SidebarProps> = (props) => {
   return (
-    <Suspense fallback={<aside className="w-64 bg-[#f6f8fc] border-r border-slate-200/80 shrink-0 h-full" />}>
+    <Suspense fallback={<aside className="w-64 bg-[#f4f7f4] border-r border-slate-200/80 shrink-0 h-full" />}>
       <SidebarContent {...props} />
     </Suspense>
   );

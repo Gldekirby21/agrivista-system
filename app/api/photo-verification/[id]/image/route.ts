@@ -68,17 +68,17 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
     // 2. Check disk storage in public/uploads/verifications/
     const uploadsDir = path.join(process.cwd(), "public", "uploads", "verifications");
+    const sanitizedKey = (record.storageKey || "").replace(/^[/\\]+/, "");
     const possiblePaths = [
       path.join(uploadsDir, `${record.id}.jpg`),
       path.join(uploadsDir, `${record.id}.png`),
       path.join(uploadsDir, `${record.id}.webp`),
-      path.join(process.cwd(), "public", record.storageKey || ""),
-      path.join(process.cwd(), record.storageKey || ""),
+      path.join(process.cwd(), "public", sanitizedKey),
     ];
 
     for (const filePath of possiblePaths) {
-      if (fs.existsSync(filePath)) {
-        const buffer = await fs.promises.readFile(filePath);
+      if (fs.existsSync(/*turbopackIgnore: true*/ filePath)) {
+        const buffer = await fs.promises.readFile(/*turbopackIgnore: true*/ filePath);
         return new NextResponse(buffer, {
           headers: {
             "Content-Type": mime,

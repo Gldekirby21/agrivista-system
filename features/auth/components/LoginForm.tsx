@@ -46,8 +46,12 @@ export const LoginForm: React.FC = () => {
     <div className="w-full max-w-md overflow-hidden rounded-2xl border border-emerald-800/40 bg-white/95 shadow-2xl backdrop-blur-xl">
       {/* Official Municipal Banner */}
       <div className="bg-gradient-to-r from-emerald-800 via-emerald-900 to-slate-900 px-8 py-7 text-center text-white">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/20 ring-4 ring-emerald-500/30">
-          <Sprout className="h-8 w-8 text-emerald-300" />
+        <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-white p-1 shadow-lg ring-4 ring-emerald-500/30 overflow-hidden">
+          <img
+            src="/logo.png"
+            alt="OMAG Polomolok Official Seal"
+            className="h-full w-full object-contain"
+          />
         </div>
         <h1 className="mt-3 text-lg font-extrabold tracking-wider">OMAG POLOMOLOK</h1>
         <p className="text-xs font-semibold tracking-wide text-emerald-200">

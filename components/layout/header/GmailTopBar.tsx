@@ -169,7 +169,7 @@ export const GmailTopBar: React.FC<GmailTopBarProps> = ({
   };
 
   return (
-    <header className="flex h-16 w-full items-center justify-between bg-[#f6f8fc] pl-0 pr-4 md:pr-6 select-none shrink-0 gap-2 md:gap-4">
+    <header className="flex h-16 w-full items-center justify-between bg-[#f4f7f4] pl-0 pr-4 md:pr-6 select-none shrink-0 gap-2 md:gap-4">
       {/* 1. Left: Hamburger Toggle & AgriVista Logo — Exact Match with Sidebar Width */}
       <div
         className={cn(
@@ -181,7 +181,7 @@ export const GmailTopBar: React.FC<GmailTopBarProps> = ({
           type="button"
           onClick={toggleSidebar}
           aria-label="Toggle Main Menu"
-          className="flex h-10 w-10 items-center justify-center rounded-full text-slate-600 hover:bg-slate-200/80 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-600 outline-none active:scale-95 shrink-0"
+          className="flex h-10 w-10 items-center justify-center rounded-full text-slate-600 hover:bg-emerald-900/10 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-700 outline-none active:scale-95 shrink-0"
           title="Main Menu"
         >
           <Menu className="h-5 w-5" />
@@ -189,14 +189,18 @@ export const GmailTopBar: React.FC<GmailTopBarProps> = ({
 
         {!isSidebarCollapsed && (
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs shrink-0">
-              <Sprout className="h-5 w-5" aria-hidden="true" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white border border-emerald-900/20 p-0.5 shadow-2xs shrink-0 overflow-hidden">
+              <img
+                src="/logo.png"
+                alt="OMAG Polomolok Logo"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div className="flex flex-col truncate">
               <span className="text-base font-bold tracking-tight text-slate-800 leading-none truncate">
                 AgriVista
               </span>
-              <span className="text-[10px] font-semibold text-emerald-700 leading-tight mt-0.5 truncate">
+              <span className="text-[10px] font-semibold text-emerald-800 leading-tight mt-0.5 truncate">
                 OMAG Polomolok
               </span>
             </div>
@@ -205,13 +209,13 @@ export const GmailTopBar: React.FC<GmailTopBarProps> = ({
       </div>
 
       {/* 2. Page Title & Subtitle (Aligned precisely with Main Content Card's left border) */}
-      <div className="hidden md:flex flex-col min-w-0 max-w-xs lg:max-w-sm xl:max-w-md border-l border-slate-200/80 pl-4 pr-2 py-0.5">
+      <div className="hidden md:flex flex-col min-w-0 max-w-xs lg:max-w-sm xl:max-w-md border-l border-emerald-900/15 pl-4 pr-2 py-0.5">
         <h2 className="text-sm font-bold text-slate-900 truncate leading-tight tracking-tight">
           {headerInfo.title}
         </h2>
         {headerInfo.subtitle && (
           <div className="flex items-center gap-1 text-[11px] text-slate-500 truncate leading-tight mt-0.5">
-            <MapPin className="h-3 w-3 text-emerald-600 shrink-0" />
+            <MapPin className="h-3 w-3 text-emerald-700 shrink-0" />
             <span className="truncate">{headerInfo.subtitle}</span>
           </div>
         )}
@@ -219,7 +223,7 @@ export const GmailTopBar: React.FC<GmailTopBarProps> = ({
 
       {/* 3. Center: Gmail-style Pill Search Bar with Global Results Dropdown */}
       <div className="flex-1 max-w-lg lg:max-w-xl min-w-0 relative" ref={searchContainerRef}>
-        <div className="relative flex h-10 md:h-11 w-full items-center rounded-full bg-[#eaf1fb] hover:bg-[#e2ecf8] focus-within:bg-white focus-within:shadow-md focus-within:ring-1 focus-within:ring-slate-300 transition-all px-4 gap-2.5 text-slate-700">
+        <div className="relative flex h-10 md:h-11 w-full items-center rounded-full bg-[#e8efe8] hover:bg-[#dfeade] focus-within:bg-white focus-within:shadow-md focus-within:ring-1 focus-within:ring-emerald-700/30 transition-all px-4 gap-2.5 text-slate-700">
           <Search className="h-4 w-4 text-slate-500 shrink-0" />
           <input
             type="text"
